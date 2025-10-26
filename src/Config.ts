@@ -40,12 +40,16 @@ export class ControllerConfig implements TotoControllerConfig {
         promises.push(secretsManager.getSecret('jwt-signing-key').then((value) => {
             this.jwtSigningKey = value;
         }));
+        promises.push(secretsManager.getSecret('gale-broker-mongo-user').then((value) => {
+            this.mongoUser = value;
+        }));
+        promises.push(secretsManager.getSecret('gale-broker-mongo-pswd').then((value) => {
+            this.mongoPwd = value;
+        }));
+        promises.push(secretsManager.getSecret('mongo-host').then((value) => {
+            this.mongoHost = value;
+        }));
 
-        // Other possible secrets to load:
-        // mongo-host
-        // mongo-user
-        // mongo-pswd
-        
         await Promise.all(promises);
 
     }
@@ -63,7 +67,7 @@ export class ControllerConfig implements TotoControllerConfig {
 
     async getMongoClient() {
 
-        const mongoUrl = `mongodb://${this.mongoUser}:${this.mongoPwd}@${this.mongoHost}:27017`
+        const mongoUrl = `mongodb://${this.mongoUser}:${this.mongoPwd}@${this.mongoHost}:27017/${dbName}`;
 
         return await new MongoClient(mongoUrl).connect();
     }

@@ -44,7 +44,7 @@ export class AgentTriggerReponse {
         }
 
         // 2. Validate the fields presence
-        if (!response.taskId || !response.agentName || !response.taskExecutionId) throw new ValidationError(400, `Invalid Agent trigger response: missing required fields. Received ${JSON.stringify(response)}.`);
+        if (!response.taskId || !response.agentName || !response.taskExecutionId) throw new ValidationError(400, `Invalid Agent response: missing required fields in the response received by the Agent. Received ${JSON.stringify(response)}.`);
 
         return new AgentTriggerReponse(
             response.taskId,

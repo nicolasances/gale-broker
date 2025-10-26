@@ -1,3 +1,4 @@
+import { ValidationError } from "toto-api-controller/dist/validation/Validator";
 
 export class TaskEndpoint {
 
@@ -12,6 +13,9 @@ export class TaskEndpoint {
     }
 
     static fromJSON(data: any): TaskEndpoint {
+
+        if (!data.baseURL) throw new ValidationError(400, `Invalid TaskEndpoint JSON: missing required fields. Received ${JSON.stringify(data)}.`);
+
         return new TaskEndpoint(
             data.baseURL,
             data.executionPath,

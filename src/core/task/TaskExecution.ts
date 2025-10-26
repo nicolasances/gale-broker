@@ -44,11 +44,11 @@ export class TaskExecution {
             if (!agent) throw new AgentNotFoundError(taskId);
 
             // 2. Send the task to the Agent for execution.
-            logger.compute(cid, `Triggering Agent ${agent.name} to execute task ${taskId}.`, "info");
+            logger.compute(cid, `Triggering ${agent.orchestrator ? "Orchestrator " : ""}Agent [${agent.name}] to execute task [${taskId}].`, "info");
 
             const agentTriggerResponse: AgentTriggerReponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(taskInputData);
 
-            logger.compute(cid, `Agent ${agent.name} triggered successfully for task ${taskId}. Received response: ${JSON.stringify(agentTriggerResponse)}.`, "info");
+            logger.compute(cid, `${agent.orchestrator ? "Orchestrator " : ""}Agent [${agent.name}] triggered successfully for task [${taskId}]. Received response: ${JSON.stringify(agentTriggerResponse)}.`, "info");
 
             // 3. Persist the task execution status.
             await new AgentTracker(db, this.execContext).trackAgentStatus({

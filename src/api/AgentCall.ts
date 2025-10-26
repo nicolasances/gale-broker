@@ -47,7 +47,14 @@ export class AgentCall {
                 }
 
                 // Parse the output
-                success(AgentTriggerReponse.fromHTTPResponse(body));
+                try {
+                    const agentResponse = AgentTriggerReponse.fromHTTPResponse(body);
+                    success(agentResponse);
+                }
+                catch (error) {
+                    failure(error);
+                }
+
 
             })
         })

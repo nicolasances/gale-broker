@@ -42,12 +42,33 @@ export class AgentsCatalog {
         const agentsCollection = this.db.collection(config.getCollections().agents);
 
         // Check for existing agent with same name or same taskId
-        const existing = await agentsCollection.findOne({$or: [ { name: agentDefinition.name }, { taskId: agentDefinition.taskId } ] });
-        
+        const existing = await agentsCollection.findOne({ $or: [{ name: agentDefinition.name }, { taskId: agentDefinition.taskId }] });
+
         if (existing) throw new ValidationError(400, `Agent with name ${agentDefinition.name} or taskId ${agentDefinition.taskId} already exists.`);
 
         const result = await agentsCollection.insertOne(agentDefinition);
 
         return result.insertedId.toHexString();
+    }
+
+    /**
+     * Updates the definition of an existing agent.
+     * 
+     * @param agentDefinition 
+     */
+    async updateAgent(agentDefinition: AgentDefinition): Promise<number> {
+
+        const config = this.execContext.config as ControllerConfig;
+
+        const agentsCollection = this.db.collection(config.getCollections().agents);
+
+        const result = await agentsCollection.updateOne(
+            { name: agentDefinition.name },
+            { $set: { agentDefinition } },
+            { upsert: true }
+        );
+
+        return result.modifiedCount;
+
     }
 }
