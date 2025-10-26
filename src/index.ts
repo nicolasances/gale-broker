@@ -7,8 +7,8 @@ import { UpdateAgent } from "./dlg/catalog/PutAgent";
 const api = new TotoAPIController("gale-broker", new ControllerConfig(), { basePath: '/galebroker' });
 
 // Endpoints related to Agent Catalog
-api.path('POST', '/catalog/agents', new RegisterAgent());
-api.path('PUT', '/catalog/agents', new UpdateAgent());
+api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.
+api.path('PUT', '/catalog/agents', new UpdateAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false });    // Temporary, until API-key based auth is implemented.
 
 // Endpoints related to Agent Executions
 api.path('POST', '/tasks', new PostTask());
