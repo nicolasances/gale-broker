@@ -1,0 +1,53 @@
+import { Db } from "mongodb";
+import { AgentDefinition } from "../../model/AgentDefinition";
+import { TaskId } from "../../model/TaskId";
+import { ExecutionContext, ValidationError } from "toto-api-controller";
+import { ControllerConfig } from "../../Config";
+
+export class AgentsCatalog {
+
+    constructor(private db: Db, private execContext: ExecutionContext) { }
+
+    /**
+     * Finds an Agent that can execute the given taskId.
+     * 
+     * @param taskId the type of task to be executed
+     * @returns the AgentDefinition that can execute the task, or null if none found.
+     */
+    async findAgentByTaskId(taskId: TaskId): Promise<AgentDefinition | null> {
+
+        const config = this.execContext.config as ControllerConfig;
+
+        const agentsCollection = this.db.collection(config.getCollections().agents);
+
+        const agentData = await agentsCollection.findOne({ taskId: taskId });
+
+        if (!agentData) return null;
+
+        return AgentDefinition.fromBSON(agentData);
+
+    }
+    /**
+     * Registers a new agent 
+     * Makes sure that there is no other agent with the same name already registered and no other agent that can execute the same taskId.
+     * 
+     * @param agentDefinition the AgentDefinition to register.
+     * @returns the ID of the newly registered Agent.
+     * @throws ValidationError if an agent with the same name or taskId already exists.
+     */
+    async registerAgent(agentDefinition: AgentDefinition): Promise<string> {
+
+        const config = this.execContext.config as ControllerConfig;
+
+        const agentsCollection = this.db.collection(config.getCollections().agents);
+
+        // Check for existing agent with same name or same taskId
+        const existing = await agentsCollection.findOne({$or: [ { name: agentDefinition.name }, { taskId: agentDefinition.taskId } ] });
+        
+        if (existing) throw new ValidationError(400, `Agent with name ${agentDefinition.name} or taskId ${agentDefinition.taskId} already exists.`);
+
+        const result = await agentsCollection.insertOne(agentDefinition);
+
+        return result.insertedId.toHexString();
+    }
+}

@@ -1,7 +1,7 @@
 {
-  "name": "toto-node-template",
+  "name": "gale-broker",
   "version": "1.0.0",
-  "description": "Template for Toto NodeJS Microservices",
+  "description": "Gale Broker is the service that acts as a bridge between Gale Agents",
   "main": "index.js",
   "scripts": {
     "start:dev": "npx nodemon",
@@ -25,7 +25,8 @@
     "mongodb": "^6.2.0",
     "path": "^0.12.7",
     "request": "^2.88.2",
-    "toto-api-controller": "^13.1.0"
+    "toto-api-controller": "^13.1.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@types/connect-busboy": "^1.0.2",
@@ -36,5 +37,5 @@
     "nodemon": "^3.0.1",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"
-  } 
+  }
 }

@@ -1,9 +1,10 @@
 import { MongoClient } from 'mongodb';
 import { TotoControllerConfig, ValidatorProps, Logger, SecretsManager } from "toto-api-controller";
 
-const dbName = 'mydb';
+const dbName = 'galebroker';
 const collections = {
-    coll1: 'coll1',
+    agents: 'agents',
+    executions: 'executions',
 };
 
 export class ControllerConfig implements TotoControllerConfig {
