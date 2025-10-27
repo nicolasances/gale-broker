@@ -4,7 +4,7 @@ import { RegisterAgent } from "./dlg/catalog/PostAgent";
 import { PostTask } from "./dlg/PostTask";
 import { UpdateAgent } from "./dlg/catalog/PutAgent";
 
-const api = new TotoAPIController("gale-broker", new ControllerConfig(), { basePath: '/galebroker' });
+const api = new TotoAPIController("gale-broker", new ControllerConfig(), { basePath: '/galebroker', port: 8081 });
 
 // Endpoints related to Agent Catalog
 api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.

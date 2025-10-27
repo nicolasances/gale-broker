@@ -24,6 +24,9 @@ export class UpdateAgent implements TotoDelegate {
 
             const updateAgentRequest = UpdateAgentRequest.fromRequest(req);
 
+            logger.compute(cid, `Updating Agent [${updateAgentRequest.agentDefinition.name}] in catalog.`);
+            logger.compute(cid, `Updating Agent [${updateAgentRequest.agentDefinition.name}] in catalog. Caller is [${req.headers.origin || req.headers.referer || req.headers['x-forwarded-for'] || req.connection.remoteAddress}]`);
+
             // Register the agent in the catalog
             const modifiedCount = await new AgentsCatalog(db, execContext).updateAgent(updateAgentRequest.agentDefinition);
 
