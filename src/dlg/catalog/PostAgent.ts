@@ -1,7 +1,7 @@
 import { Request } from "express";
 import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { ControllerConfig } from "../../Config";
+import { GaleConfig } from "../../Config";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 
 /**
@@ -11,15 +11,13 @@ export class RegisterAgent implements TotoDelegate {
 
     async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<RegisterAgentResponse> {
 
-        const config = execContext.config as ControllerConfig;
+        const config = execContext.config as GaleConfig;
         const logger = execContext.logger;
         const cid = execContext.cid;
 
-        let client;
-
         try {
 
-            client = await config.getMongoClient();
+            const client = await config.getMongoClient();
             const db = client.db(config.getDBName());
 
             const registerAgentRequest = RegisterAgentRequest.fromRequest(req);
@@ -44,9 +42,6 @@ export class RegisterAgent implements TotoDelegate {
                 throw error;
             }
 
-        }
-        finally {
-            if (client) client.close();
         }
 
     }

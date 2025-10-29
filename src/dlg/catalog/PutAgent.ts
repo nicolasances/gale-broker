@@ -1,7 +1,7 @@
 import { Request } from "express";
 import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { ControllerConfig } from "../../Config";
+import { GaleConfig } from "../../Config";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 
 /**
@@ -11,21 +11,18 @@ export class UpdateAgent implements TotoDelegate {
 
     async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<UpdateAgentResponse> {
 
-        const config = execContext.config as ControllerConfig;
+        const config = execContext.config as GaleConfig;
         const logger = execContext.logger;
         const cid = execContext.cid;
 
-        let client;
-
         try {
 
-            client = await config.getMongoClient();
+            const client = await config.getMongoClient();
             const db = client.db(config.getDBName());
 
             const updateAgentRequest = UpdateAgentRequest.fromRequest(req);
 
-            logger.compute(cid, `Updating Agent [${updateAgentRequest.agentDefinition.name}] in catalog.`);
-            logger.compute(cid, `Updating Agent [${updateAgentRequest.agentDefinition.name}] in catalog. Caller is [${req.headers.origin || req.headers.referer || req.headers['x-forwarded-for'] || req.connection.remoteAddress}]`);
+            logger.compute(cid, `Updating Agent [${updateAgentRequest.agentDefinition.name}] in catalog. Agent Task Endpoint: [${updateAgentRequest.agentDefinition.endpoint.baseURL}${updateAgentRequest.agentDefinition.endpoint.executionPath}]`);
 
             // Register the agent in the catalog
             const modifiedCount = await new AgentsCatalog(db, execContext).updateAgent(updateAgentRequest.agentDefinition);
@@ -47,9 +44,6 @@ export class UpdateAgent implements TotoDelegate {
                 throw error;
             }
 
-        }
-        finally {
-            if (client) client.close();
         }
 
     }

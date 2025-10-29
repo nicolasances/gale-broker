@@ -1,10 +1,13 @@
 import { TotoAPIController } from "toto-api-controller";
-import { ControllerConfig } from "./Config";
+import { GaleConfig } from "./Config";
 import { RegisterAgent } from "./dlg/catalog/PostAgent";
 import { PostTask } from "./dlg/PostTask";
 import { UpdateAgent } from "./dlg/catalog/PutAgent";
+import { PubSubMessageBus } from "./bus/impl/google/PubSub";
 
-const api = new TotoAPIController("gale-broker", new ControllerConfig(), { basePath: '/galebroker', port: 8080 });
+const galeConfig = new GaleConfig({messageBusImpl: new PubSubMessageBus()});
+
+const api = new TotoAPIController("gale-broker", galeConfig, { basePath: '/galebroker', port: 8081 });
 
 // Endpoints related to Agent Catalog
 api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.
@@ -17,3 +20,15 @@ api.path('POST', '/tasks', new PostTask());
 api.init().then(() => {
     api.listen();
 });
+
+const shutdown = async () => {
+
+    console.log('Shutting down gracefully...');
+    
+    await GaleConfig.closeMongoClient();
+    
+    process.exit(0);
+};
+
+process.on('SIGINT', shutdown);
+process.on('SIGTERM', shutdown);

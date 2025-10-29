@@ -1,12 +1,16 @@
 import { Db } from "mongodb";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { TaskId } from "../../model/TaskId";
+import { TaskId } from "../../model/Task";
 import { ExecutionContext, ValidationError } from "toto-api-controller";
-import { ControllerConfig } from "../../Config";
+import { GaleConfig } from "../../Config";
 
 export class AgentsCatalog {
 
-    constructor(private db: Db, private execContext: ExecutionContext) { }
+    private config: GaleConfig;
+
+    constructor(private db: Db, private execContext: ExecutionContext) {
+        this.config = execContext.config as GaleConfig;
+    }
 
     /**
      * Finds an Agent that can execute the given taskId.
@@ -16,9 +20,7 @@ export class AgentsCatalog {
      */
     async findAgentByTaskId(taskId: TaskId): Promise<AgentDefinition | null> {
 
-        const config = this.execContext.config as ControllerConfig;
-
-        const agentsCollection = this.db.collection(config.getCollections().agents);
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
         const agentData = await agentsCollection.findOne({ taskId: taskId });
 
@@ -37,9 +39,7 @@ export class AgentsCatalog {
      */
     async registerAgent(agentDefinition: AgentDefinition): Promise<string> {
 
-        const config = this.execContext.config as ControllerConfig;
-
-        const agentsCollection = this.db.collection(config.getCollections().agents);
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
         // Check for existing agent with same name or same taskId
         const existing = await agentsCollection.findOne({ $or: [{ name: agentDefinition.name }, { taskId: agentDefinition.taskId }] });
@@ -58,13 +58,11 @@ export class AgentsCatalog {
      */
     async updateAgent(agentDefinition: AgentDefinition): Promise<number> {
 
-        const config = this.execContext.config as ControllerConfig;
-
-        const agentsCollection = this.db.collection(config.getCollections().agents);
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
         const result = await agentsCollection.updateOne(
             { name: agentDefinition.name },
-            { $set: { agentDefinition } },
+            { $set: { ...agentDefinition } },
             { upsert: true }
         );
 

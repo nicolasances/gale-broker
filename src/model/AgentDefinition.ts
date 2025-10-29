@@ -1,6 +1,6 @@
 import { ValidationError } from "toto-api-controller";
 import { TaskEndpoint } from "./TaskEndpoint";
-import { TaskId } from "./TaskId";
+import { TaskId } from "./Task";
 
 export class AgentDefinition {
 
