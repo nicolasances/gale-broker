@@ -16,6 +16,27 @@ export class GaleMessageBus {
     }
 
     /**
+     * Decodes a message received from the message bus, based on the underlying implementation.
+     * 
+     * @param msgPayload the payload received from the message bus
+     */
+    decodeMessage(msgPayload: any): GaleMessage {
+
+        try {
+            
+            return this.messageBus.decodeMessage(msgPayload);
+
+        } catch (error) {
+
+            // If there's a decoding error log and throw
+            console.log(`Error decoding message ${JSON.stringify(msgPayload)}: ${error}`);
+            throw error;
+
+        }
+
+    }
+
+    /**
      * Publishes a task to the message bus for asynchronous processing.
      * @param task the task to publish
      * @param cid a correlation id for tracking
@@ -33,6 +54,8 @@ export class GaleMessageBus {
 export interface IMessageBus {
 
     publishMessage(topicOrQueue: string, msgPayload: any): Promise<void>;
+
+    decodeMessage(msgPayload: any): GaleMessage;
     
 }
 
@@ -51,6 +74,26 @@ export class GaleMessage {
         this.cid = cid;
         this.timestamp = Date.now();
         this.payload = payload;
+    }
+
+    /**
+     * Validates the message structure, to make sure that it is compliant with the interface of Gale Message.
+     * @param message the message to validate
+     */
+    static validate(message: any): boolean {
+
+        if (!message) {
+            return false;
+        }
+
+        const { type, cid, timestamp, payload } = message;
+
+        if (typeof type !== "string") return false;
+        if (typeof cid !== "string") return false;
+        if (typeof timestamp !== "number") return false;
+        if (typeof payload !== "object") return false;
+
+        return true;
     }
 }
 

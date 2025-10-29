@@ -7,9 +7,9 @@ export class AgentCall {
 
     execContext: ExecutionContext;
     agentDefinition: AgentDefinition;
-    bearerToken: string;
+    bearerToken?: string;
 
-    constructor(agentDefinition: AgentDefinition, execContext: ExecutionContext, bearerToken: string) {
+    constructor(agentDefinition: AgentDefinition, execContext: ExecutionContext, bearerToken?: string) {
 
         this.agentDefinition = agentDefinition;
         this.execContext = execContext;
@@ -33,7 +33,7 @@ export class AgentCall {
                 method: 'POST',
                 headers: {
                     'x-correlation-id': this.execContext.cid,
-                    'Authorization': `Bearer ${this.bearerToken}`,
+                    'Authorization': this.bearerToken ? `Bearer ${this.bearerToken}` : null,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(task)

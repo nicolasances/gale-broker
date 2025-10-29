@@ -1,6 +1,6 @@
 
 import { PubSub, Topic } from "@google-cloud/pubsub";
-import { IMessageBus } from "../../MessageBus";
+import { GaleMessage, IMessageBus } from "../../MessageBus";
 
 let pubsubClient: PubSub | null = null;
 const topics = new Map<string, TopicWrapper>();
@@ -42,6 +42,32 @@ export class PubSubMessageBus implements IMessageBus {
 
         await this.topic!.topic.publishMessage({ data: new Uint8Array(Buffer.from(message)) });
 
+    }
+
+    /**
+     * Decodes the message received from PubSub. 
+     * Messages in PubSub are base64 encoded, this method decodes them accordingly.
+     * 
+     * PubSub provides the message in a HTTP Body with the following format:
+     * {
+     *   "message": {
+     *     "data": "<base64-encoded-data>"
+     *   }
+     * }
+     *
+     * @param msgPayload the payload of the message
+     */
+    decodeMessage(msgPayload: any): GaleMessage {
+
+        let decodedPayload = JSON.parse(String(Buffer.from(msgPayload.message.data, 'base64')))
+
+        if (!GaleMessage.validate(decodedPayload)) {
+            console.log("Invalid GaleMessage received from PubSub:", decodedPayload);
+            throw new Error("Invalid GaleMessage received from PubSub");
+        }
+
+        return decodedPayload as GaleMessage;
+        
     }
 }
 
