@@ -20,7 +20,7 @@ api.path('PUT', '/catalog/agents', new UpdateAgent(), { contentType: 'applicatio
 api.path('POST', '/tasks', new PostTask());
 
 // Endpoints for async events
-api.path('POST', '/events/agent', new OnAgentEvent(), {contentType: 'application/json', noAuth: true, ignoreBasePath: false}); 
+api.path('POST', '/events/agent', new OnAgentEvent()); 
 
 
 api.init().then(() => {
