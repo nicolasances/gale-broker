@@ -19,7 +19,7 @@ api.path('PUT', '/catalog/agents', new UpdateAgent(), { contentType: 'applicatio
 // Endpoints related to Agent Executions
 api.path('POST', '/tasks', new PostTask());
 
-// Endpoints for async events
+// Endpoints for async events (push pubsub-like brokers)
 api.path('POST', '/events/agent', new OnAgentEvent()); 
 
 

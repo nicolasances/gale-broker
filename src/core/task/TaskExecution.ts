@@ -20,12 +20,12 @@ import { AgentTaskResponse, SubTaskInfo } from "../../model/AgentTask";
  */
 export class TaskExecution {
 
-    bearerToken?: string;
+    bearerToken: string;
     execContext: ExecutionContext;
     config: GaleConfig;
     cid: string;
 
-    constructor(execContext: ExecutionContext, bearerToken?: string) {
+    constructor(execContext: ExecutionContext, bearerToken: string) {
         this.execContext = execContext;
         this.bearerToken = bearerToken;
         this.config = execContext.config as GaleConfig;
