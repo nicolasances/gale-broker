@@ -2,7 +2,7 @@ import { Request } from "express";
 import { ExecutionContext, TotoDelegate, UserContext } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
 import { TaskExecution } from "../../core/task/TaskExecution";
-import { extractBearerToken } from "../../util/HeaderUtils";
+import { extractAuthHeader, extractBearerToken } from "../../util/HeaderUtils";
 
 /**
  * Endpoint to receive Agent-related events.
@@ -13,6 +13,12 @@ import { extractBearerToken } from "../../util/HeaderUtils";
 export class OnAgentEvent implements TotoDelegate {
 
     async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<any> {
+
+        console.log("-------------------------------------------------------------------");
+        console.log("AUTH HEADER:");
+        console.log(extractAuthHeader(req));
+        console.log("-------------------------------------------------------------------");
+        
 
         const logger = execContext.logger;
         const messageBus = (execContext.config as GaleConfig).messageBus;
