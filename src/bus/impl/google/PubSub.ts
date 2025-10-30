@@ -40,7 +40,7 @@ export class PubSubMessageBus implements IMessageBus {
         // Push message to PubSub
         let message = JSON.stringify(msgPayload);
 
-        await this.topic!.topic.publishMessage({ data: new Uint8Array(Buffer.from(message)) });
+        await this.topic!.topic.publishMessage({ data: new TextEncoder().encode(message) });
 
     }
 
