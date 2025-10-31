@@ -8,7 +8,7 @@ import { GaleMessage, IMessageBus } from "../../MessageBus";
  */
 export class DevQMessageBus implements IMessageBus {
 
-    constructor(private queueEndpoint: string) { }
+    constructor(private queueEndpoint: string, private authToken: string) { }
 
     /**
      * This methods decodes the message received from DevQ. 
@@ -37,6 +37,7 @@ export class DevQMessageBus implements IMessageBus {
                 uri: `${this.queueEndpoint}`,
                 method: 'POST',
                 headers: {
+                    'Authorization': `Bearer ${this.authToken}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(msgPayload)

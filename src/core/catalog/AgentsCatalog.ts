@@ -1,8 +1,8 @@
 import { Db } from "mongodb";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { TaskId } from "../../model/Task";
 import { ExecutionContext, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
+import { TaskId } from "../../model/AgentTask";
 
 export class AgentsCatalog {
 
