@@ -11,6 +11,12 @@ import { SQSMessageBus } from "./bus/impl/google/SQS";
 
 export const APINAME = "gale-broker";
 
+console.log("*****************************************************************");
+console.log("* QUEUE: ");
+console.log(process.env['SQS_QUEUE_URL']);
+console.log("*****************************************************************");
+
+
 // export const galeConfig = new GaleConfig({messageBusImpl: new DevQMessageBus("http://localhost:8000/msg", "REPLACE WITH AUTH TOKEN")});
 // export const galeConfig = new GaleConfig({messageBusImpl: new PubSubMessageBus()});
 export const galeConfig = new GaleConfig({messageBusImpl: new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")});
