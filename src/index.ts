@@ -21,7 +21,7 @@ class GaleMessageBusFactory extends MessageBusFactory {
             case "gcp":
                 return new PubSubMessageBus();
             case "local":
-                return new DevQMessageBus("http://localhost:8000/msg", "REPLACE WITH AUTH TOKEN");
+                return new DevQMessageBus("http://localhost:8000/msg");
             default:
                 throw new Error(`Unsupported hyperscaler: ${hyperscaler}`);
         }

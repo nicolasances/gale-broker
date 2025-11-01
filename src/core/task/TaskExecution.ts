@@ -3,7 +3,7 @@ import { AgentNotFoundError } from "../../model/error/AgentNotFoundError";
 import { AgentCall } from "../../api/AgentCall";
 import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { TaskTracker } from "../tracking/TaskTracker";
+import { Status, TaskTracker } from "../tracking/TaskTracker";
 import { v4 as uuidv4 } from "uuid";
 import { AgentTaskRequest, AgentTaskResponse, SubTaskInfo } from "../../model/AgentTask";
 
@@ -74,6 +74,23 @@ export class TaskExecution {
 
             logger.compute(cid, `Agent [${agent.name}] executed successfully task [${task.taskId}]. Stop reason: ${agentTaskResponse.stopReason}. Correlation Id: ${correlationId}`, "info");
 
+            // Based on the answer, determine the task's status
+            let status: Status;
+            switch (agentTaskResponse.stopReason) {
+                case 'completed':
+                    status = 'completed';
+                    break;
+                case 'failed':
+                    status = 'failed';
+                    break;
+                case 'subtasks':
+                    status = 'waiting';
+                    break;
+                default:
+                    status = 'started';
+                    break;
+            }
+
             // 3. Persist the task execution status.
             await taskTracker.trackTaskStatus({
                 correlationId: correlationId,
@@ -81,7 +98,7 @@ export class TaskExecution {
                 agentName: agent.name,
                 taskInstanceId: task.taskInstanceId,
                 startedAt: new Date(startTime),
-                status: "stopped",
+                status: status,
                 stopReason: agentTaskResponse.stopReason,
                 executionTimeMs: endTime - startTime,
                 parentTaskId: task.parentTask?.taskId,
@@ -103,15 +120,29 @@ export class TaskExecution {
                 }, taskTracker);
             }
 
-            // 4.2. If 'failed', throw an error
-            if (agentTaskResponse.stopReason === 'failed') {
-
-                logger.compute(cid, `Task [${task.taskId}] execution failed at Agent [${agent.name}].`, "error");
-
-                throw new TotoRuntimeError(500, `Task [${task.taskId}] execution failed at Agent [${agent.name}].`);
-            }
-
             // 5. If this is a subtask running and it completed, check if all sibling subtasks are completed, and if so, notify the parent task.
+            if (task.parentTask && agentTaskResponse.stopReason === 'completed') {
+
+                // 5.1. Check if all sibling subtasks are completed
+                const allSiblingsCompleted = await taskTracker.areSiblingsCompleted(task.parentTask.taskInstanceId);
+
+                // 5.2. If so, update the parent task status 
+                if (allSiblingsCompleted) {
+
+                    logger.compute(cid, `All sibling subtasks for parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] are completed. Updating parent task status.`, "info");
+
+                    const mustNotifyParent = await taskTracker.flagParentAsChildrenCompleted(task.parentTask.taskInstanceId);
+
+                    // 5.3. If the parent task is now completed, notify the parent task's agent
+                    if (mustNotifyParent) {
+
+                        logger.compute(cid, `Notifying parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] that all subtasks are completed.`, "info");
+
+                        // TODO publish a message to notify the parent task's agent that all subtasks are completed 
+                    }
+                    else logger.compute(cid, `Parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] has been already marked as 'childrenCompleted'. No notification sent.`, "info");
+                }
+            }
 
             return agentTaskResponse;
 
@@ -153,7 +184,7 @@ export class TaskExecution {
                 correlationId: parentTask.correlationId,
                 taskId: subtask.taskId,
                 taskInstanceId: uuidv4(),
-                taskInputData: subtask.taskInputData, 
+                taskInputData: subtask.taskInputData,
                 parentTask: parentTask
             });
 

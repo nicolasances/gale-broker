@@ -1,5 +1,8 @@
 import http from "request";
 import { GaleMessage, IMessageBus } from "../../MessageBus";
+import { GaleConfig } from "../../../Config";
+import { generateTotoJWTToken } from "../../../util/GenerateTotoJWTToken";
+import { galeConfig } from "../../..";
 
 /**
  * Implementation of MessageBus to use DevQ (local queue for local testing purposes only).
@@ -8,7 +11,9 @@ import { GaleMessage, IMessageBus } from "../../MessageBus";
  */
 export class DevQMessageBus extends IMessageBus {
 
-    constructor(private queueEndpoint: string, private authToken: string) { super(); }
+    private authToken: string | null = null;
+
+    constructor(private queueEndpoint: string) { super(); }
 
     /**
      * This methods decodes the message received from DevQ. 
@@ -30,6 +35,10 @@ export class DevQMessageBus extends IMessageBus {
      * @returns Promise with the publishing result
      */
     async publishMessage(topicOrQueue: string, msgPayload: any): Promise<void> {
+
+        if (!this.authToken) {
+            this.authToken = generateTotoJWTToken("gale-broker", galeConfig);
+        }
 
         return new Promise<void>((success, failure) => {
 
