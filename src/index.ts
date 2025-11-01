@@ -15,7 +15,7 @@ export const APINAME = "gale-broker";
 // export const galeConfig = new GaleConfig({messageBusImpl: new PubSubMessageBus()});
 export const galeConfig = new GaleConfig({messageBusImpl: new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")});
 
-const api = new TotoAPIController(APINAME, galeConfig, { basePath: '/galebroker', port: 8081 });
+const api = new TotoAPIController(APINAME, galeConfig, { basePath: '/galebroker', port: 8080 });
 
 // Endpoints related to Agent Catalog
 api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.
