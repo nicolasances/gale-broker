@@ -7,11 +7,15 @@ import { PubSubMessageBus } from "./bus/impl/google/PubSub";
 import { OnAgentEvent } from "./evt/dlg/OnAgentEvent";
 import { DevQMessageBus } from "./bus/impl/google/DevQ";
 import { GetTaskExecutionGraph } from "./dlg/tracking/GetTasksTracking";
+import { SQSMessageBus } from "./bus/impl/google/SQS";
 
-// const galeConfig = new GaleConfig({messageBusImpl: new DevQMessageBus("http://localhost:8000/msg", "REPLACE WITH AUTH TOKEN")});
-const galeConfig = new GaleConfig({messageBusImpl: new PubSubMessageBus()});
+export const APINAME = "gale-broker";
 
-const api = new TotoAPIController("gale-broker", galeConfig, { basePath: '/galebroker', port: 8080 });
+// export const galeConfig = new GaleConfig({messageBusImpl: new DevQMessageBus("http://localhost:8000/msg", "REPLACE WITH AUTH TOKEN")});
+// export const galeConfig = new GaleConfig({messageBusImpl: new PubSubMessageBus()});
+export const galeConfig = new GaleConfig({messageBusImpl: new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")});
+
+const api = new TotoAPIController(APINAME, galeConfig, { basePath: '/galebroker', port: 8081 });
 
 // Endpoints related to Agent Catalog
 api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.

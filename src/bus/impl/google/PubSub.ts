@@ -15,7 +15,7 @@ function getPubSubClient(): PubSub {
 /**
  * Manages the publishing of an event
  */
-export class PubSubMessageBus implements IMessageBus {
+export class PubSubMessageBus extends IMessageBus {
 
     topic: TopicWrapper | null | undefined = null;
 

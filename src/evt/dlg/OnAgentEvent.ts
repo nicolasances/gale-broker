@@ -1,8 +1,8 @@
 import { Request } from "express";
 import { ExecutionContext, TotoDelegate, UserContext, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { TaskExecution } from "../../core/task/TaskExecution";
-import { extractAuthHeader, extractBearerToken } from "../../util/HeaderUtils";
+import { GaleMessage } from "../../bus/MessageBus";
+import { GaleMessageHandler } from "../handlers/GaleMessageHandler";
 
 /**
  * Endpoint to receive Agent-related events.
@@ -14,30 +14,15 @@ export class OnAgentEvent implements TotoDelegate {
 
     async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<any> {
 
-        const logger = execContext.logger;
         const messageBus = (execContext.config as GaleConfig).messageBus;
 
-        // Extract the Bearer token from the Authorization header, if present.
-        const token = extractBearerToken(req);
-
-        if (!token) throw new ValidationError(403, "No Bearer token provided in the Authorization header.");
-
         // 1. Based on the message bus being used, decode the message appropriately.
-        const decodedMessage = messageBus.decodeMessage(req.body);
+        const decodedMessage: GaleMessage = messageBus.decodeMessage(req.body);
 
-        logger.compute("", `Received Agent Event with body [${JSON.stringify(decodedMessage)}]`, "info");
+        // 2. Call the Gale Message handler
+        await new GaleMessageHandler().onMessage(decodedMessage);
 
-        // 2. Check the type of message and process accordingly.
-        switch (decodedMessage.type) {
-            case 'task':
-                // Trigger a task execution
-                await new TaskExecution(execContext, token).startTask(decodedMessage.payload);
-                break;
-            default:
-                logger.compute("", `Unknown event type [${decodedMessage.type}] received`);
-        }
-
-        return { processed: true }
+        return { processed: true };
 
     }
 

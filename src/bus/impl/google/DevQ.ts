@@ -6,9 +6,9 @@ import { GaleMessage, IMessageBus } from "../../MessageBus";
  * 
  * See https://github.com/nicolasances/devq.git
  */
-export class DevQMessageBus implements IMessageBus {
+export class DevQMessageBus extends IMessageBus {
 
-    constructor(private queueEndpoint: string, private authToken: string) { }
+    constructor(private queueEndpoint: string, private authToken: string) { super(); }
 
     /**
      * This methods decodes the message received from DevQ. 

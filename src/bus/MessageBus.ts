@@ -1,5 +1,7 @@
+import { Logger } from "toto-api-controller";
 import { GaleConfig } from "../Config";
 import { AgentTaskRequest } from "../model/AgentTask";
+import { GaleMessageHandler } from "../evt/handlers/GaleMessageHandler";
 
 /**
  * This module provides asynchronous messaging capabilities. 
@@ -13,6 +15,12 @@ export class GaleMessageBus {
 
     constructor(messageBusImpl: IMessageBus) { 
         this.messageBus = messageBusImpl;
+
+        if (this.messageBus instanceof IQueue) {
+            
+            // If the message bus is a queue, set up a message handler
+            (this.messageBus as IQueue).setMessageHandler(this.handleMessage.bind(this));
+        }
     }
 
     /**
@@ -49,14 +57,47 @@ export class GaleMessageBus {
         // Call the underlying message bus implementation
         return this.messageBus.publishMessage("galeagents", msg);
     }
+
+    /**
+     * Handles the incoming message from the message bus. 
+     * This is used for queue-like message buses (e.g., SQS, RabbitMQ).
+     * 
+     * @param msgPayload the payload of the message
+     */
+    async handleMessage(msgPayload: any): Promise<void> {
+
+        // 1. Decode the Gale Message
+        const galeMessage: GaleMessage = this.decodeMessage(msgPayload);
+
+        // 2. Call the Gale Message Handler
+        await new GaleMessageHandler().onMessage(galeMessage);
+
+    }
 }
 
-export interface IMessageBus {
+/**
+ * Interface for Message Bus implementations (e.g., Pub/Sub, SQS, RabbitMQ). 
+ * Use this interface for publish-subscribe style message buses (e.g., Pub/Sub).
+ */
+export abstract class IMessageBus {
 
-    publishMessage(topicOrQueue: string, msgPayload: any): Promise<void>;
-
-    decodeMessage(msgPayload: any): GaleMessage;
+    abstract publishMessage(topicOrQueue: string, msgPayload: any): Promise<void>;
+    abstract decodeMessage(msgPayload: any): GaleMessage;
     
+}
+
+/**
+ * Interface for Queue-like Message Buses (e.g., SQS, RabbitMQ)
+ */
+export abstract class IQueue extends IMessageBus {
+
+    abstract setMessageHandler(handler: (msgPayload: any) => Promise<void>): void;
+
+    /**
+     * Used for cleanup during application shutdown.
+     */
+    abstract close(): Promise<void>;
+
 }
 
 /**
