@@ -111,6 +111,8 @@ export class TaskExecution {
                 throw new TotoRuntimeError(500, `Task [${task.taskId}] execution failed at Agent [${agent.name}].`);
             }
 
+            // 5. If this is a subtask running and it completed, check if all sibling subtasks are completed, and if so, notify the parent task.
+
             return agentTaskResponse;
 
         } catch (error) {

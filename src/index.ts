@@ -7,21 +7,32 @@ import { PubSubMessageBus } from "./bus/impl/google/PubSub";
 import { OnAgentEvent } from "./evt/dlg/OnAgentEvent";
 import { DevQMessageBus } from "./bus/impl/google/DevQ";
 import { GetTaskExecutionGraph } from "./dlg/tracking/GetTasksTracking";
-import { SQSMessageBus } from "./bus/impl/google/SQS";
+import { SQSMessageBus } from "./bus/impl/aws/SQS";
+import { IMessageBus, MessageBusFactory } from "./bus/MessageBus";
 
 export const APINAME = "gale-broker";
 
-console.log("*****************************************************************");
-console.log("* QUEUE: ");
-console.log(process.env['SQS_QUEUE_URL']);
-console.log("*****************************************************************");
+class GaleMessageBusFactory extends MessageBusFactory {
 
+    createMessageBus(hyperscaler: "aws" | "gcp" | "local"): IMessageBus {
+        switch (hyperscaler) {
+            case "aws":
+                return new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")
+            case "gcp":
+                return new PubSubMessageBus();
+            case "local":
+                return new DevQMessageBus("http://localhost:8000/msg", "REPLACE WITH AUTH TOKEN");
+            default:
+                throw new Error(`Unsupported hyperscaler: ${hyperscaler}`);
+        }
+    }
+}
 
-// export const galeConfig = new GaleConfig({messageBusImpl: new DevQMessageBus("http://localhost:8000/msg", "REPLACE WITH AUTH TOKEN")});
-// export const galeConfig = new GaleConfig({messageBusImpl: new PubSubMessageBus()});
-export const galeConfig = new GaleConfig({messageBusImpl: new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")});
+export const galeConfig = new GaleConfig({
+    messageBusFactory: new GaleMessageBusFactory()
+});
 
-const api = new TotoAPIController(APINAME, galeConfig, { basePath: '/galebroker', port: 8080 });
+const api = new TotoAPIController(APINAME, galeConfig, { basePath: '/galebroker', port: process.env.HYPERSCALER == 'local' ? 8081 : 8080 });
 
 // Endpoints related to Agent Catalog
 api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.

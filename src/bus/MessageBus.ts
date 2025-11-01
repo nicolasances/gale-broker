@@ -13,8 +13,9 @@ export class GaleMessageBus {
 
     private messageBus: IMessageBus;
 
-    constructor(messageBusImpl: IMessageBus) { 
-        this.messageBus = messageBusImpl;
+    constructor(factory: MessageBusFactory, config: GaleConfig) { 
+        
+        this.messageBus = factory.createMessageBus(config.getHyperscaler());
 
         if (this.messageBus instanceof IQueue) {
             
@@ -73,6 +74,14 @@ export class GaleMessageBus {
         await new GaleMessageHandler().onMessage(galeMessage);
 
     }
+}
+
+/**
+ * Factory for creating Message Bus instances based on the hyperscaler.
+ */
+export abstract class MessageBusFactory {
+
+    abstract createMessageBus(hyperscaler: "aws" | "gcp" | "local"): IMessageBus; 
 }
 
 /**
