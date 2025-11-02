@@ -30,6 +30,18 @@ export class TaskTracker {
     }
 
     /**
+     * Finds a task by its instance ID.
+     * 
+     * @param taskInstanceId the task instance ID
+     */
+    async findTaskByInstanceId(taskInstanceId: string): Promise<TaskStatusRecord | null> {
+
+        const collection = this.db.collection(this.config.getCollections().tasks);
+
+        return await collection.findOne({ taskInstanceId }) as any as TaskStatusRecord | null;
+    }
+
+    /**
      * Flags the speified parent task (by its task instance Id) as 'childrenCompleted'. 
      * 
      * IMPORTANT: this method helps avoiding RACE CONDITIONS by using an upsert and returning the count of modified documents.
@@ -93,6 +105,7 @@ export interface TaskStatusRecord {
     executionTimeMs?: number; // Execution time, in milliseconds
     parentTaskId?: string; // If this is a subtask, the parent task ID
     parentTaskInstanceId?: string; // If this is a subtask, the parent task instance ID
+    subtaskGroupId?: string; // If this is a subtask, the group ID of the subtask batch
 }
 
 export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenCompleted"; 
