@@ -1,6 +1,7 @@
 import { MongoClient } from 'mongodb';
 import { TotoControllerConfig, ValidatorProps, Logger, SecretsManager } from "toto-api-controller";
 import { GaleMessageBus, IMessageBus, MessageBusFactory } from './bus/MessageBus';
+import { TotoControllerConfigOptions } from 'toto-api-controller/dist/model/TotoControllerConfig';
 
 const dbName = 'galebroker';
 const collections = {
@@ -8,32 +9,24 @@ const collections = {
     tasks: 'tasks',
 };
 
-export class GaleConfig implements TotoControllerConfig {
+export class GaleConfig extends TotoControllerConfig {
 
     messageBus: GaleMessageBus;
     logger: Logger | undefined;
-    
+
     private static mongoClient: MongoClient | null = null;
     private static mongoClientPromise: Promise<MongoClient> | null = null;
 
-    private env: string;
-    private hyperscaler: "aws" | "gcp" | "local";
-
     private mongoUser: string | undefined;
     private mongoPwd: string | undefined;
-    private mongoHost: string | undefined;
 
     expectedAudience: string | undefined;
     totoAuthEndpoint: string | undefined;
     jwtSigningKey: string | undefined;
 
-    constructor(options: GaleConfigOptions) {
+    constructor(options: GaleConfigOptions, totoControllerOptions: TotoControllerConfigOptions) {
 
-        this.hyperscaler = process.env.HYPERSCALER == 'aws' ? 'aws' : (process.env.HYPERSCALER == 'gcp' ? 'gcp' : 'local');
-
-        let env = process.env.HYPERSCALER == 'aws' ? (process.env.ENVIRONMENT ?? 'dev') : process.env.GCP_PID;
-        if (!env) env = 'dev';
-        this.env = env;
+        super({ apiName: options.apiName }, totoControllerOptions);
 
         // Initialize the message bus
         this.messageBus = new GaleMessageBus(options.messageBusFactory, this);
@@ -42,29 +35,17 @@ export class GaleConfig implements TotoControllerConfig {
 
     async load(): Promise<any> {
 
-        if (!process.env.ENVIRONMENT) this.logger?.compute("", `No environment provided, loading default configuration`);
-        if (!process.env.HYPERSCALER) this.logger?.compute("", `No hyperscaler provided, loading default configuration`);
-
-        this.logger?.compute("", `Loading configuration for environment [${this.env}] on hyperscaler [${this.hyperscaler}]`);
-
-        const secretsManager = new SecretsManager(this.hyperscaler == 'local' ? 'gcp' : this.hyperscaler, this.env, this.logger!);  // Use GCP Secrets Manager when local
+        const secretsManager = new SecretsManager(this.hyperscaler == 'local' ? 'aws' : this.hyperscaler, this.env, this.logger!);  // Use GCP Secrets Manager when local
 
         let promises = [];
 
-        promises.push(secretsManager.getSecret('toto-expected-audience').then((value) => {
-            this.expectedAudience = value;
-        }));
-        promises.push(secretsManager.getSecret('jwt-signing-key').then((value) => {
-            this.jwtSigningKey = value;
-        }));
+        promises.push(super.load());
+
         promises.push(secretsManager.getSecret('gale-broker-mongo-user').then((value) => {
             this.mongoUser = value;
         }));
         promises.push(secretsManager.getSecret('gale-broker-mongo-pswd').then((value) => {
             this.mongoPwd = value;
-        }));
-        promises.push(secretsManager.getSecret('mongo-host').then((value) => {
-            this.mongoHost = value;
         }));
 
         await Promise.all(promises);
@@ -87,7 +68,7 @@ export class GaleConfig implements TotoControllerConfig {
     }
 
     async getMongoClient() {
-        
+
         if (GaleConfig.mongoClient) return GaleConfig.mongoClient;
 
         // If connection is in progress, wait for it
@@ -121,19 +102,19 @@ export class GaleConfig implements TotoControllerConfig {
      * Call this during application shutdown.
      */
     static async closeMongoClient(): Promise<void> {
-        
+
         if (GaleConfig.mongoClient) {
-            
+
             await GaleConfig.mongoClient.close();
-            
+
             GaleConfig.mongoClient = null;
         }
     }
-    
+
     getExpectedAudience(): string {
-        
+
         return String(this.expectedAudience)
-        
+
     }
 
     getDBName() { return dbName }
@@ -145,4 +126,5 @@ export class GaleConfig implements TotoControllerConfig {
 export interface GaleConfigOptions {
 
     messageBusFactory: MessageBusFactory;
+    apiName: string;
 }

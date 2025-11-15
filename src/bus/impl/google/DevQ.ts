@@ -3,6 +3,7 @@ import { GaleMessage, IMessageBus } from "../../MessageBus";
 import { GaleConfig } from "../../../Config";
 import { generateTotoJWTToken } from "../../../util/GenerateTotoJWTToken";
 import { galeConfig } from "../../..";
+import { newTotoServiceToken, TotoControllerConfig } from "toto-api-controller";
 
 /**
  * Implementation of MessageBus to use DevQ (local queue for local testing purposes only).
@@ -11,9 +12,13 @@ import { galeConfig } from "../../..";
  */
 export class DevQMessageBus extends IMessageBus {
 
-    private authToken: string | null = null;
+    config: TotoControllerConfig;
 
-    constructor(private queueEndpoint: string) { super(); }
+    constructor(private queueEndpoint: string, config: TotoControllerConfig) { 
+        super(); 
+
+        this.config = config;
+    }
 
     /**
      * This methods decodes the message received from DevQ. 
@@ -36,9 +41,7 @@ export class DevQMessageBus extends IMessageBus {
      */
     async publishMessage(topicOrQueue: string, msgPayload: any): Promise<void> {
 
-        if (!this.authToken) {
-            this.authToken = generateTotoJWTToken("gale-broker", galeConfig);
-        }
+        const authToken = newTotoServiceToken(this.config);
 
         return new Promise<void>((success, failure) => {
 
@@ -46,7 +49,7 @@ export class DevQMessageBus extends IMessageBus {
                 uri: `${this.queueEndpoint}`,
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${this.authToken}`,
+                    'Authorization': `Bearer ${authToken}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(msgPayload)

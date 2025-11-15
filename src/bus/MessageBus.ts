@@ -1,4 +1,4 @@
-import { Logger } from "toto-api-controller";
+import { Logger, TotoControllerConfig } from "toto-api-controller";
 import { GaleConfig } from "../Config";
 import { AgentTaskRequest } from "../model/AgentTask";
 import { GaleMessageHandler } from "../evt/handlers/GaleMessageHandler";
@@ -15,8 +15,8 @@ export class GaleMessageBus {
 
     constructor(factory: MessageBusFactory, config: GaleConfig) { 
         
-        this.messageBus = factory.createMessageBus(config.getHyperscaler());
-
+        this.messageBus = factory.createMessageBus(config);
+        
         if (this.messageBus instanceof IQueue) {
             
             // If the message bus is a queue, set up a message handler
@@ -81,7 +81,7 @@ export class GaleMessageBus {
  */
 export abstract class MessageBusFactory {
 
-    abstract createMessageBus(hyperscaler: "aws" | "gcp" | "local"): IMessageBus; 
+    abstract createMessageBus(config: TotoControllerConfig): IMessageBus; 
 }
 
 /**

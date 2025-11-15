@@ -29,6 +29,32 @@ export class AgentsCatalog {
         return AgentDefinition.fromBSON(agentData);
 
     }
+
+    /**
+     * Retrieves all registered agents.
+     * @returns All registered agents
+     */
+    async getAgents(): Promise<AgentDefinition[]> {
+
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
+
+        const agentsData = await agentsCollection.find({}).toArray();
+
+        return agentsData.map(agentData => AgentDefinition.fromBSON(agentData));
+
+    }
+
+    /**
+     * Deletes all agents that can execute the given taskId.
+     * @param taskId the task type to find all agents to delete
+     * @returns 
+     */
+    async deleteAgentsWithTaskId(taskId: TaskId): Promise<number> {
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);   
+        const result = await agentsCollection.deleteMany({ taskId: taskId });
+        return result.deletedCount || 0;
+    }
+
     /**
      * Registers a new agent 
      * Makes sure that there is no other agent with the same name already registered and no other agent that can execute the same taskId.
