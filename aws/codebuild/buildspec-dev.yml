@@ -5,7 +5,7 @@ phases:
     commands:
       - echo "Fetching AWS Account ID dynamically..."
       - export AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-      - export IMAGE=toto-ms-ex1
+      - export IMAGE=gale-broker
       - export ENV=dev
       - echo "Account ID is $AWS_ACCOUNT_ID"
       - echo Logging in to Amazon ECR...

@@ -1,12 +1,16 @@
 import { Db } from "mongodb";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { TaskId } from "../../model/TaskId";
 import { ExecutionContext, ValidationError } from "toto-api-controller";
-import { ControllerConfig } from "../../Config";
+import { GaleConfig } from "../../Config";
+import { TaskId } from "../../model/AgentTask";
 
 export class AgentsCatalog {
 
-    constructor(private db: Db, private execContext: ExecutionContext) { }
+    private config: GaleConfig;
+
+    constructor(private db: Db, private execContext: ExecutionContext) {
+        this.config = execContext.config as GaleConfig;
+    }
 
     /**
      * Finds an Agent that can execute the given taskId.
@@ -16,9 +20,7 @@ export class AgentsCatalog {
      */
     async findAgentByTaskId(taskId: TaskId): Promise<AgentDefinition | null> {
 
-        const config = this.execContext.config as ControllerConfig;
-
-        const agentsCollection = this.db.collection(config.getCollections().agents);
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
         const agentData = await agentsCollection.findOne({ taskId: taskId });
 
@@ -27,6 +29,32 @@ export class AgentsCatalog {
         return AgentDefinition.fromBSON(agentData);
 
     }
+
+    /**
+     * Retrieves all registered agents.
+     * @returns All registered agents
+     */
+    async getAgents(): Promise<AgentDefinition[]> {
+
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
+
+        const agentsData = await agentsCollection.find({}).toArray();
+
+        return agentsData.map(agentData => AgentDefinition.fromBSON(agentData));
+
+    }
+
+    /**
+     * Deletes all agents that can execute the given taskId.
+     * @param taskId the task type to find all agents to delete
+     * @returns 
+     */
+    async deleteAgentsWithTaskId(taskId: TaskId): Promise<number> {
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);   
+        const result = await agentsCollection.deleteMany({ taskId: taskId });
+        return result.deletedCount || 0;
+    }
+
     /**
      * Registers a new agent 
      * Makes sure that there is no other agent with the same name already registered and no other agent that can execute the same taskId.
@@ -37,17 +65,34 @@ export class AgentsCatalog {
      */
     async registerAgent(agentDefinition: AgentDefinition): Promise<string> {
 
-        const config = this.execContext.config as ControllerConfig;
-
-        const agentsCollection = this.db.collection(config.getCollections().agents);
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
         // Check for existing agent with same name or same taskId
-        const existing = await agentsCollection.findOne({$or: [ { name: agentDefinition.name }, { taskId: agentDefinition.taskId } ] });
-        
+        const existing = await agentsCollection.findOne({ $or: [{ name: agentDefinition.name }, { taskId: agentDefinition.taskId }] });
+
         if (existing) throw new ValidationError(400, `Agent with name ${agentDefinition.name} or taskId ${agentDefinition.taskId} already exists.`);
 
         const result = await agentsCollection.insertOne(agentDefinition);
 
         return result.insertedId.toHexString();
+    }
+
+    /**
+     * Updates the definition of an existing agent.
+     * 
+     * @param agentDefinition 
+     */
+    async updateAgent(agentDefinition: AgentDefinition): Promise<number> {
+
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
+
+        const result = await agentsCollection.updateOne(
+            { name: agentDefinition.name },
+            { $set: { ...agentDefinition } },
+            { upsert: true }
+        );
+
+        return result.modifiedCount;
+
     }
 }

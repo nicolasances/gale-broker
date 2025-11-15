@@ -7,9 +7,9 @@ import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 /**
  * Endpoint to register a new Agent Definition
  */
-export class RegisterAgent implements TotoDelegate {
+export class UpdateAgent implements TotoDelegate {
 
-    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<RegisterAgentResponse> {
+    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<UpdateAgentResponse> {
 
         const config = execContext.config as GaleConfig;
         const logger = execContext.logger;
@@ -20,14 +20,16 @@ export class RegisterAgent implements TotoDelegate {
             const client = await config.getMongoClient();
             const db = client.db(config.getDBName());
 
-            const registerAgentRequest = RegisterAgentRequest.fromRequest(req);
+            const updateAgentRequest = UpdateAgentRequest.fromRequest(req);
+
+            logger.compute(cid, `Updating Agent [${updateAgentRequest.agentDefinition.name}] in catalog. Agent Task Endpoint: [${updateAgentRequest.agentDefinition.endpoint.baseURL}${updateAgentRequest.agentDefinition.endpoint.executionPath}]`);
 
             // Register the agent in the catalog
-            const insertedId = await new AgentsCatalog(db, execContext).registerAgent(registerAgentRequest.agentDefinition);
+            const modifiedCount = await new AgentsCatalog(db, execContext).updateAgent(updateAgentRequest.agentDefinition);
 
-            logger.compute(cid, `Agent [${registerAgentRequest.agentDefinition.name}] registered with id [${insertedId}]`);
+            logger.compute(cid, `Agent [${updateAgentRequest.agentDefinition.name}] registration updated. Modified count: [${modifiedCount}]`);
 
-            return { insertedId }
+            return { modifiedCount }
 
 
         } catch (error) {
@@ -48,7 +50,7 @@ export class RegisterAgent implements TotoDelegate {
 
 }
 
-class RegisterAgentRequest {
+class UpdateAgentRequest {
 
     agentDefinition: AgentDefinition;
 
@@ -59,16 +61,15 @@ class RegisterAgentRequest {
     /**
      * Creates a RegisterAgentRequest from an Express request.
      * @param req the Express request.
-     * @returns a RegisterAgentRequest instance.
+     * @returns a UpdateAgentRequest instance.
      */
-    static fromRequest(req: Request): RegisterAgentRequest {
+    static fromRequest(req: Request): UpdateAgentRequest {
         const body = req.body;
 
         if (!body.agentDefinition) throw new ValidationError(400, "agentDefinition is required");
 
-        return new RegisterAgentRequest(AgentDefinition.fromJSON(body.agentDefinition));
+        return new UpdateAgentRequest(AgentDefinition.fromJSON(body.agentDefinition));
     }
 }
-interface RegisterAgentResponse {
-    insertedId: string;
+interface UpdateAgentResponse {
 }

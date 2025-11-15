@@ -8,15 +8,15 @@
 ########################################################
 # 1. ECR Repository
 ########################################################
-resource "aws_ecr_repository" "toto_ms_ex1_ecr_private_repo" {
-  name = format("%s/%s", var.toto_env, "toto-ms-ex1")
+resource "aws_ecr_repository" "gale_broker_ecr_private_repo" {
+  name = format("%s/%s", var.toto_env, "gake-broker")
 }
 
 ########################################################
 # 2. Task Definition
 ########################################################
-resource "aws_ecs_task_definition" "toto_ms_ex1_service_task_def" {
-  family = format("%s-%s", "toto-ms-ex1", var.toto_env)
+resource "aws_ecs_task_definition" "gale_broker_service_task_def" {
+  family = format("%s-%s", "gake-broker", var.toto_env)
   requires_compatibilities = ["FARGATE"]
   execution_role_arn = aws_iam_role.toto_ecs_task_execution_role.arn
   task_role_arn = aws_iam_role.toto_ecs_task_role.arn
@@ -25,8 +25,8 @@ resource "aws_ecs_task_definition" "toto_ms_ex1_service_task_def" {
   network_mode = "awsvpc"
   container_definitions = jsonencode([
     {
-      name      = "toto-ms-ex1"
-      image     = format("%s.dkr.ecr.%s.amazonaws.com/%s/%s:latest", data.aws_caller_identity.current.account_id, var.aws_region, var.toto_env, "toto-ms-ex1")
+      name      = "gake-broker"
+      image     = format("%s.dkr.ecr.%s.amazonaws.com/%s/%s:latest", data.aws_caller_identity.current.account_id, var.aws_region, var.toto_env, "gake-broker")
       environment = [
         {
             name = "HYPERSCALER", 
@@ -36,6 +36,10 @@ resource "aws_ecs_task_definition" "toto_ms_ex1_service_task_def" {
           name = "ENVIRONMENT", 
           value = var.toto_env
         },
+        {
+          name = "SQS_QUEUE_URL",
+          value = aws_sqs_queue.gale_broker_queue.url
+        }
       ]
       entryPoint = [
         "sh", "-c", "npm run start"
@@ -55,7 +59,7 @@ resource "aws_ecs_task_definition" "toto_ms_ex1_service_task_def" {
         logDriver = "awslogs", 
         options = {
           awslogs-create-group = "true"
-          awslogs-group = format("/ecs/%s/%s", var.toto_env, "toto-ms-ex1")
+          awslogs-group = format("/ecs/%s/%s", var.toto_env, "gake-broker")
           awslogs-region = var.aws_region
           awslogs-stream-prefix = "ecs"
         }
@@ -67,10 +71,10 @@ resource "aws_ecs_task_definition" "toto_ms_ex1_service_task_def" {
 ########################################################
 # 3. Service
 ########################################################
-resource "aws_ecs_service" "toto_ms_ex1_service" {
-  name = "toto-ms-ex1"
+resource "aws_ecs_service" "gale_broker_service" {
+  name = "gake-broker"
   cluster = aws_ecs_cluster.ecs_cluster.arn
-  task_definition = aws_ecs_task_definition.toto_ms_ex1_service_task_def.arn
+  task_definition = aws_ecs_task_definition.gale_broker_service_task_def.arn
   desired_count = 1
   capacity_provider_strategy {
     base = 0
@@ -83,8 +87,8 @@ resource "aws_ecs_service" "toto_ms_ex1_service" {
     assign_public_ip = true
   }
   load_balancer {
-    target_group_arn = aws_lb_target_group.toto_ms_ex1_service_tg.arn
-    container_name = "toto-ms-ex1"
+    target_group_arn = aws_lb_target_group.gale_broker_service_tg.arn
+    container_name = "gake-broker"
     container_port = 8080
   }
 }
@@ -93,8 +97,8 @@ resource "aws_ecs_service" "toto_ms_ex1_service" {
 # 4. CI/CD Pipeline
 ########################################################
 # 4.1. Cloud Build
-resource "aws_codebuild_project" "toto_ms_ex1_container_builder" {
-  name          = format("%s-%s", "toto-ms-ex1", var.toto_env)
+resource "aws_codebuild_project" "gale_broker_container_builder" {
+  name          = format("%s-%s", "gake-broker", var.toto_env)
   service_role  = aws_iam_role.codebuild_role.arn
   build_timeout = "120"
 
@@ -113,7 +117,7 @@ resource "aws_codebuild_project" "toto_ms_ex1_container_builder" {
   # --- SOURCE CONFIGURATION (GitHub via CodeStar Connection) ---
   source {
     type     = "GITHUB"
-    location = "https://github.com/nicolasances/toto-ms-ex1.git"
+    location = "https://github.com/nicolasances/gake-broker.git"
     
     # CRITICAL: Path to the buildspec file in the repository
     buildspec = "aws/codebuild/buildspec-${var.toto_env}.yml"
@@ -137,8 +141,8 @@ resource "aws_codebuild_project" "toto_ms_ex1_container_builder" {
 ############################################################################################
 # 4.2. CodePipeline
 # AWS CodePipeline Resource
-resource "aws_codepipeline" "toto_ms_ex1_ecs_pipeline" {
-  name     = "toto-ms-ex1-ecs-pipeline-${var.toto_env}"
+resource "aws_codepipeline" "gale_broker_ecs_pipeline" {
+  name     = "gake-broker-ecs-pipeline-${var.toto_env}"
   role_arn = aws_iam_role.codepipeline_role.arn
 
   # Artifact store definition
@@ -160,7 +164,7 @@ resource "aws_codepipeline" "toto_ms_ex1_ecs_pipeline" {
 
       configuration = {
         ConnectionArn    = var.code_connection_arn
-        FullRepositoryId = "nicolasances/toto-ms-ex1"
+        FullRepositoryId = "nicolasances/gake-broker"
         BranchName       = var.toto_env == "prod" ? "prod" : "dev"
       }
     }
@@ -179,7 +183,7 @@ resource "aws_codepipeline" "toto_ms_ex1_ecs_pipeline" {
       version         = "1"
 
       configuration = {
-        ProjectName = aws_codebuild_project.toto_ms_ex1_container_builder.name
+        ProjectName = aws_codebuild_project.gale_broker_container_builder.name
       }
     }
   }
@@ -197,7 +201,7 @@ resource "aws_codepipeline" "toto_ms_ex1_ecs_pipeline" {
 
       configuration = {
         ClusterName = aws_ecs_cluster.ecs_cluster.name
-        ServiceName = aws_ecs_service.toto_ms_ex1_service.name
+        ServiceName = aws_ecs_service.gale_broker_service.name
         # The imagedefinitions.json file must be created by the CodeBuild step
         # and included in the BuildArtifact output.
         FileName    = "imagedefinitions.json" 
@@ -212,8 +216,8 @@ resource "aws_codepipeline" "toto_ms_ex1_ecs_pipeline" {
 # 5.1. Target Groups
 #    This section creates the Target Group for this service.
 ########################################################
-resource "aws_lb_target_group" "toto_ms_ex1_service_tg" {
-  name = format("%s-tg-%s", "toto-ms-ex1", var.toto_env)
+resource "aws_lb_target_group" "gale_broker_service_tg" {
+  name = format("%s-tg-%s", "gake-broker", var.toto_env)
   port = 8080
   protocol = "HTTP"
   vpc_id = aws_vpc.toto_vpc.id
@@ -232,29 +236,66 @@ resource "aws_lb_target_group" "toto_ms_ex1_service_tg" {
 }
 
 ##############################################################
-# 2. ALB Listener Rules
+# 5.2. ALB Listener Rules
 ##############################################################
-resource "aws_lb_listener_rule" "toto_ms_ex1_alb_listener_rule" {
+resource "aws_lb_listener_rule" "gale_broker_alb_listener_rule" {
   listener_arn = aws_lb_listener.toto_alb_listener_http_8080.arn
   condition {
     path_pattern {
-      values = ["/ex1/*"]
+      values = ["/galebroker/*"]
     }
   }
   action {
     type = "forward"
-    target_group_arn = aws_lb_target_group.toto_ms_ex1_service_tg.arn
+    target_group_arn = aws_lb_target_group.gale_broker_service_tg.arn
   }
 }
-resource "aws_lb_listener_rule" "toto_ms_ex1_alb_listener_rule_https" {
+resource "aws_lb_listener_rule" "gale_broker_alb_listener_rule_https" {
   listener_arn = aws_lb_listener.toto_alb_listener_https.arn
   condition {
     path_pattern {
-      values = ["/ex1/*"]
+      values = ["/galebroker/*"]
     }
   }
   action {
     type = "forward"
-    target_group_arn = aws_lb_target_group.toto_ms_ex1_service_tg.arn
+    target_group_arn = aws_lb_target_group.gale_broker_service_tg.arn
   }
+}
+
+
+##############################################################
+# 6. SQS Queue
+##############################################################
+resource "aws_sqs_queue" "gale_broker_queue" {
+  name = format("%s-%s", "gale-broker", var.toto_env)
+  visibility_timeout_seconds = 300
+}
+
+# IAM Policy for SQS Access
+resource "aws_iam_policy" "gale_broker_sqs_policy" {
+  name        = format("%s-sqs-policy-%s", "gale-broker", var.toto_env)
+  description = "Allow ECS task to send and receive messages from gale-broker queue"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes",
+          "sqs:GetQueueUrl"
+        ]
+        Resource = aws_sqs_queue.gale_broker_queue.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "gale_broker_sqs_policy_attachment" {
+  role       = aws_iam_role.toto_ecs_task_role.name
+  policy_arn = aws_iam_policy.gale_broker_sqs_policy.arn
 }
