@@ -4,36 +4,29 @@ import { TaskId } from "./AgentTask";
 
 export class AgentDefinition {
 
-    name: string; // The name of the Agent.
-    taskId: TaskId; // The unique identifier of the type of task this Agent can execute.
-    endpoint: TaskEndpoint; // The endpoint (URL) where the Agent can be reached.
-    orchestrator: boolean;
-
-    constructor(name: string, taskId: TaskId, endpoint: TaskEndpoint, orchestrator: boolean = false) {
-        this.name = name;
-        this.taskId = taskId;
-        this.endpoint = endpoint;
-        this.orchestrator = orchestrator;
-    }
+    name: string = ""; // The name of the Agent.
+    description: string = ""; // The description of the Agent.
+    taskId: TaskId = ""; // The unique identifier of the type of task this Agent can execute.
+    inputSchema: any = {}; 
+    outputSchema: any = {}; 
+    endpoint: TaskEndpoint = new TaskEndpoint(""); // The endpoint (URL) where the Agent can be reached.
 
     static fromJSON(data: any): AgentDefinition {
 
-        if (!data.name || !data.taskId || !data.endpoint) throw new ValidationError(400, `Invalid AgentDefinition JSON: missing required fields. Received ${JSON.stringify(data)}.`);
+        if (!data.name || !data.taskId || !data.endpoint || !data.inputSchema || !data.outputSchema) throw new ValidationError(400, `Invalid AgentDefinition JSON: missing required fields. Received ${JSON.stringify(data)}.`);
 
-        return new AgentDefinition(
-            data.name,
-            data.taskId,
-            TaskEndpoint.fromJSON(data.endpoint),
-            data.orchestrator
-        );
+        const def = new AgentDefinition();
+        def.name = data.name;
+        def.description = data.description || "";
+        def.taskId = data.taskId;
+        def.inputSchema = data.inputSchema;
+        def.outputSchema = data.outputSchema;
+        def.endpoint = TaskEndpoint.fromJSON(data.endpoint);
+
+        return def;
     }
 
     static fromBSON(data: any): AgentDefinition {
-        return new AgentDefinition(
-            data.name,
-            data.taskId,
-            TaskEndpoint.fromBSON(data.endpoint),
-            data.orchestrator
-        );
+        return AgentDefinition.fromJSON(data);
     }
 }
