@@ -102,7 +102,9 @@ export class TaskExecution {
                 stopReason: agentTaskResponse.stopReason,
                 executionTimeMs: endTime - startTime,
                 parentTaskId: task.parentTask?.taskId,
-                parentTaskInstanceId: task.parentTask?.taskInstanceId
+                parentTaskInstanceId: task.parentTask?.taskInstanceId, 
+                taskOutput: agentTaskResponse.taskOutput, 
+                taskInput: task.taskInputData
             });
 
             // 4. Check the Stop Reason
@@ -149,6 +151,14 @@ export class TaskExecution {
 
                         const subtaskGroupId = completedSubtask.subtaskGroupId!;
 
+                        // Get the output data of all the completed child tasks to be able to send the output data to the parent task if needed
+                        const completedChildren = await taskTracker.findChildrenWithSubtaskGroupId(completedSubtask.parentTaskInstanceId!, subtaskGroupId);
+
+                        const childrenOutputs: any[] = completedChildren.map(child => child.taskOutput);
+
+                        // Find the parent
+                        const parentTask = await taskTracker.findTaskByInstanceId(completedSubtask.parentTaskInstanceId!);
+
                         // Publish a message to notify the parent task's agent that all subtasks are completed 
                         const agentTaskRequest = new AgentTaskRequest({
                             command: {
@@ -158,7 +168,10 @@ export class TaskExecution {
                             correlationId: completedSubtask.correlationId,
                             taskId: completedSubtask.parentTaskId!,
                             taskInstanceId: completedSubtask.parentTaskInstanceId!,
-                            taskInputData: {},
+                            taskInputData: { 
+                                originalInput: parentTask?.taskInput,
+                                childrenOutputs 
+                            },
                         });
 
                         const bus = this.config.messageBus;
@@ -223,7 +236,7 @@ export class TaskExecution {
                 try {
 
                     // 1. Publish the task to the bus
-                    await bus.publishTask(agentTaskRequest, this.cid)
+                    await bus.publishTask(agentTaskRequest, this.cid);
 
                     // 2. Save a record
                     await taskTracker.trackTaskStatus({
@@ -234,7 +247,9 @@ export class TaskExecution {
                         status: "published",
                         parentTaskId: parentTask.taskId,
                         parentTaskInstanceId: parentTask.taskInstanceId,
-                        subtaskGroupId: subtaskGroupId
+                        subtaskGroupId: subtaskGroupId, 
+                        taskOutput: null, 
+                        taskInput: agentTaskRequest.taskInputData
                     });
 
                     this.execContext.logger.compute(this.cid, `Subtask [${subtask.taskId}] successfully spawned.`, "info");

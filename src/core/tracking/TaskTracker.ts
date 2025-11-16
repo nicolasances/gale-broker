@@ -42,6 +42,20 @@ export class TaskTracker {
     }
 
     /**
+     * Finds all child tasks of a given parent task that belong to a specific subtask group.
+     * 
+     * @param parentTaskInstanceId the instance Id of the parent task
+     * @param subtaskGroupId the group id of the subtasks
+     * @returns 
+     */
+    async findChildrenWithSubtaskGroupId(parentTaskInstanceId: string, subtaskGroupId: string): Promise<TaskStatusRecord[]> {
+        
+        const children = await this.db.collection(this.config.getCollections().tasks).find({ parentTaskInstanceId, subtaskGroupId }).toArray();
+
+        return children.map(doc => doc as any as TaskStatusRecord);
+    }
+
+    /**
      * Flags the speified parent task (by its task instance Id) as 'childrenCompleted'. 
      * 
      * IMPORTANT: this method helps avoiding RACE CONDITIONS by using an upsert and returning the count of modified documents.
@@ -106,6 +120,8 @@ export interface TaskStatusRecord {
     parentTaskId?: string; // If this is a subtask, the parent task ID
     parentTaskInstanceId?: string; // If this is a subtask, the parent task instance ID
     subtaskGroupId?: string; // If this is a subtask, the group ID of the subtask batch
+    taskOutput: any; // The output produced by the task execution
+    taskInput: any; // The input data provided to the task execution
 }
 
 export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenCompleted"; 
