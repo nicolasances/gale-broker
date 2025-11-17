@@ -100,7 +100,7 @@ export class TaskTracker {
      */
     async findAllRoots(): Promise<TaskStatusRecord[]> {
 
-        const collection = this.db.collection(this.config.getCollections().tasks).find({ parentTaskInstanceId: { $exists: false } }).sort({ startedAt: -1 });
+        const collection = this.db.collection(this.config.getCollections().tasks).find({$or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }]}).sort({ startedAt: -1 });
 
         return (await collection.toArray()).map(doc => doc as any as TaskStatusRecord);
     }
