@@ -132,8 +132,9 @@ export interface TaskStatusRecord {
     executionTimeMs?: number; // Execution time, in milliseconds
     parentTaskId?: string; // If this is a subtask, the parent task ID
     parentTaskInstanceId?: string; // If this is a subtask, the parent task instance ID
+    resumedAfterSubtasksGroupId?: string; // If this is a task that is resumed after a subtasks group finished, track the group ID here
     subtaskGroupId?: string; // If this is a subtask, the group ID of the subtask batch
-    taskOutput: any; // The output produced by the task execution
+    taskOutput?: any; // The output produced by the task execution
     taskInput: any; // The input data provided to the task execution
 }
 

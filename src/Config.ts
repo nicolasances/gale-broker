@@ -7,6 +7,7 @@ const dbName = 'galebroker';
 const collections = {
     agents: 'agents',
     tasks: 'tasks',
+    flows: 'flows',
 };
 
 export class GaleConfig extends TotoControllerConfig {
