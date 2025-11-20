@@ -2,7 +2,8 @@ import { ValidationError } from "toto-api-controller";
 import { TaskStatusRecord } from "../core/tracking/TaskTracker";
 
 /**
- * This class provides methods to build a 
+ * This class provides methods to build an in-memory representation of a task execution graph
+ * from a set of TaskStatusRecords.
  */
 export class TaskExecutionGraph {
 
