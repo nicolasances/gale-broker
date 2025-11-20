@@ -61,7 +61,7 @@ export class TaskExecution {
             if (!agent) throw new AgentNotFoundError(task.taskId);
 
             // 2. Send the task to the Agent for execution.
-            logger.compute(cid, `Triggering Agent [${agent.name}] to execute task [${task.taskId}]. Correlation Id: ${correlationId}`, "info");
+            logger.compute(cid, `Triggering Agent [${agent.name}] to execute task [${task.taskId}] with command [${JSON.stringify(task.command)}]. Correlation Id: ${correlationId}`, "info");
 
             // 2.1. Add any needed missing field to the task request 
             task.correlationId = correlationId;
@@ -76,6 +76,7 @@ export class TaskExecution {
                 status: "started",
                 parentTaskId: task.parentTask?.taskId,
                 parentTaskInstanceId: task.parentTask?.taskInstanceId, 
+                subtaskGroupId: task.subtaskGroupId,
                 taskInput: task.taskInputData, 
                 resumedAfterSubtasksGroupId: task.command.command === 'resume' ? task.command.completedSubtaskGroupId : undefined
             }
@@ -148,14 +149,14 @@ export class TaskExecution {
                     // 5.3. If the parent task is now completed, notify the parent task's agent
                     if (mustNotifyParent) {
 
-                        logger.compute(cid, `Notifying parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] that all subtasks are completed.`, "info");
-
                         // Get the subtasksGroupId of the batch of subtasks that were executed
                         const completedSubtask = await taskTracker.findTaskByInstanceId(task.taskInstanceId);
 
                         if (!completedSubtask) throw new TotoRuntimeError(500, `Inconsistent state: completed subtask [${task.taskId} - ${task.taskInstanceId}] not found in tracking database.`);
 
                         const subtaskGroupId = completedSubtask.subtaskGroupId!;
+
+                        logger.compute(cid, `Notifying parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] that all subtasks of group [${subtaskGroupId}] are completed.`, "info");
 
                         // Get the output data of all the completed child tasks to be able to send the output data to the parent task if needed
                         const completedChildren = await taskTracker.findChildrenWithSubtaskGroupId(completedSubtask.parentTaskInstanceId!, subtaskGroupId);
