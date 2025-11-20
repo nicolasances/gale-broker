@@ -6,7 +6,8 @@
   "scripts": {
     "start:dev": "npx nodemon",
     "build": "rm -rf ./build && tsc",
-    "start": "node build/index.js"
+    "start": "node build/index.js",
+    "test": "mocha --require ts-node/register --project tsconfig.test.json test/**/*.test.ts"
   },
   "author": "nicolasances",
   "license": "ISC",
@@ -30,12 +31,16 @@
     "uuid": "^8.3.2"
   },
   "devDependencies": {
+    "@types/chai": "^5.2.2",
     "@types/connect-busboy": "^1.0.2",
     "@types/express": "^4.17.20",
     "@types/fs-extra": "^11.0.3",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^16.11.7",
     "@types/uuid": "^8.3.4",
+    "chai": "^4.x",
+    "mocha": "^11.7.1",
     "nodemon": "^3.0.1",
     "ts-node": "^10.9.1",
     "typescript": "^5.2.2"

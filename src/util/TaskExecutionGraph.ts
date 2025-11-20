@@ -2,7 +2,8 @@ import { ValidationError } from "toto-api-controller";
 import { TaskStatusRecord } from "../core/tracking/TaskTracker";
 
 /**
- * This class provides methods to build a 
+ * This class provides methods to build an in-memory representation of a task execution graph
+ * from a set of TaskStatusRecords.
  */
 export class TaskExecutionGraph {
 
@@ -17,15 +18,15 @@ export class TaskExecutionGraph {
         if (records.length === 0) return null;
 
         // Find the root record (the one without a parentTaskId)
-        const rootRecords = records.filter(r => !r.parentTaskId);
+        const rootRecords = records.filter(r => !r.parentTaskInstanceId && !r.resumedAfterSubtasksGroupId);
 
         // If there are multiple root records, throw an error
         if (rootRecords.length > 1) throw new ValidationError(400, "Multiple root records found.");
         if (rootRecords.length === 0) throw new ValidationError(400, "No root record found.");
 
         const rootRecord = rootRecords[0];
-        
-        const rootNode = { record: rootRecord, children: buildSubtree(rootRecord, records) };
+
+        const rootNode = { record: rootRecord, next: buildNext(rootRecord, records) };
 
         const graph = new TaskExecutionGraph(rootNode);
 
@@ -40,29 +41,53 @@ export class TaskExecutionGraph {
  * @param records the complete set of task execution records to build the graph from 
  * @returns the list of children of the current node
  */
-function buildSubtree(currentNode: TaskStatusRecord, records: TaskStatusRecord[]): TaskExecutionGraphNode[] | null {
+function buildNext(currentNode: TaskStatusRecord, records: TaskStatusRecord[]): SubtaskGroupNode | TaskExecutionGraphNode | null {
 
-    const childRecords = records.filter(r => r.parentTaskId === currentNode.taskId);
+    const childRecords = records.filter(r => r.parentTaskInstanceId === currentNode.taskInstanceId);
 
-    if (childRecords.length === 0) return null;
+    if (childRecords && childRecords.length > 0) {
 
-    const children: TaskExecutionGraphNode[] = childRecords.map((record) => {
+        // Create the group 
+        const group : SubtaskGroupNode = {
+            groupId: childRecords[0].subtaskGroupId!,
+            nodes: childRecords.map((record) => {
+                const childNode: TaskExecutionGraphNode = {
+                    record: record,
+                    next: buildNext(record, records)
+                };
+                return childNode;
+            }), 
+            next: buildNextFromGroup(childRecords[0].subtaskGroupId!, records)
+        }
 
-        const child = {
-            record: record,
-            children: buildSubtree(record, records)
-        };
+        return group;
+    }
 
-        return child;
-    });
+    // There are no children
+    return null;
+}
 
-    return children;
+function buildNextFromGroup(groupId: string, records: TaskStatusRecord[]): SubtaskGroupNode | TaskExecutionGraphNode | null {
+
+    const resumedRecord = records.find(r => r.resumedAfterSubtasksGroupId === groupId);
+
+    if (!resumedRecord) return null; 
+
+    return {
+        record: resumedRecord,
+        next: buildNext(resumedRecord, records)
+    }
+}
+
+export interface TaskExecutionGraphNode {
+
+    record: TaskStatusRecord
+    next: SubtaskGroupNode | TaskExecutionGraphNode | null
 
 }
 
-interface TaskExecutionGraphNode {
-
-    record: TaskStatusRecord
-    children: TaskExecutionGraphNode[] | null
-
+export interface SubtaskGroupNode {
+    groupId: string;
+    nodes: TaskExecutionGraphNode[];
+    next: SubtaskGroupNode | TaskExecutionGraphNode | null;
 }

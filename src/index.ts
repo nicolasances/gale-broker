@@ -11,6 +11,7 @@ import { SQSMessageBus } from "./bus/impl/aws/SQS";
 import { IMessageBus, MessageBusFactory } from "./bus/MessageBus";
 import { GetAgents } from "./dlg/catalog/GetAgents";
 import { DeleteAgent } from "./dlg/catalog/DeleteAgent";
+import { GetRootTasks } from "./dlg/tracking/GetRootTasks";
 
 export const APINAME = "gale-broker";
 
@@ -48,6 +49,7 @@ api.path('DELETE', '/catalog/agents/:taskId', new DeleteAgent());
 
 // Endpoints related to Agent Executions
 api.path('POST', '/tasks', new PostTask());
+api.path('GET', '/tasks', new GetRootTasks())
 
 api.path('GET', '/tasks/:correlationId/graph', new GetTaskExecutionGraph());
 

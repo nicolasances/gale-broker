@@ -3,6 +3,7 @@ import { GaleMessage } from "../../bus/MessageBus";
 import { TaskExecution } from "../../core/task/TaskExecution";
 import { APINAME, galeConfig } from "../..";
 import { generateTotoJWTToken } from "../../util/GenerateTotoJWTToken";
+import { AgentTaskRequest } from "../../model/AgentTask";
 
 export class GaleMessageHandler {
 
@@ -21,7 +22,7 @@ export class GaleMessageHandler {
         switch (msg.type) {
             case 'task':
                 // Trigger a task execution
-                await new TaskExecution(execContext, token).startTask(msg.payload);
+                await new TaskExecution(execContext, token).startTask(AgentTaskRequest.fromHTTPRequest({ body: msg.payload }));
                 break;
             default:
                 logger.compute("", `Unknown event type [${msg.type}] received`);

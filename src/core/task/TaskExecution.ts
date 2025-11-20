@@ -3,7 +3,7 @@ import { AgentNotFoundError } from "../../model/error/AgentNotFoundError";
 import { AgentCall } from "../../api/AgentCall";
 import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { Status, TaskTracker } from "../tracking/TaskTracker";
+import { Status, TaskStatusRecord, TaskTracker } from "../tracking/TaskTracker";
 import { v4 as uuidv4 } from "uuid";
 import { AgentTaskRequest, AgentTaskResponse, SubTaskInfo } from "../../model/AgentTask";
 
@@ -61,16 +61,31 @@ export class TaskExecution {
             if (!agent) throw new AgentNotFoundError(task.taskId);
 
             // 2. Send the task to the Agent for execution.
-            logger.compute(cid, `Triggering Agent [${agent.name}] to execute task [${task.taskId}]. Correlation Id: ${correlationId}`, "info");
+            logger.compute(cid, `Triggering Agent [${agent.name}] to execute task [${task.taskId}] with command [${JSON.stringify(task.command)}]. Correlation Id: ${correlationId}`, "info");
 
             // 2.1. Add any needed missing field to the task request 
             task.correlationId = correlationId;
             task.taskInstanceId = task.taskInstanceId || uuidv4();
 
+            const taskStatus: TaskStatusRecord = {
+                correlationId: correlationId,
+                taskId: task.taskId,
+                agentName: agent.name,
+                taskInstanceId: task.taskInstanceId,
+                startedAt: new Date(Date.now()),
+                status: "started",
+                parentTaskId: task.parentTask?.taskId,
+                parentTaskInstanceId: task.parentTask?.taskInstanceId, 
+                subtaskGroupId: task.subtaskGroupId,
+                taskInput: task.taskInputData, 
+                resumedAfterSubtasksGroupId: task.command.command === 'resume' ? task.command.completedSubtaskGroupId : undefined
+            }
+
+            // Persist the task execution status.
+            await taskTracker.trackTaskStatus(taskStatus);
+
             // 2.2. Call the agent
-            const startTime = Date.now();
             const agentTaskResponse: AgentTaskResponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(task);
-            const endTime = Date.now();
 
             logger.compute(cid, `Agent [${agent.name}] executed successfully task [${task.taskId}]. Stop reason: ${agentTaskResponse.stopReason}. Correlation Id: ${correlationId}`, "info");
 
@@ -92,20 +107,12 @@ export class TaskExecution {
             }
 
             // 3. Persist the task execution status.
-            await taskTracker.trackTaskStatus({
-                correlationId: correlationId,
-                taskId: task.taskId,
-                agentName: agent.name,
-                taskInstanceId: task.taskInstanceId,
-                startedAt: new Date(startTime),
-                status: status,
-                stopReason: agentTaskResponse.stopReason,
-                executionTimeMs: endTime - startTime,
-                parentTaskId: task.parentTask?.taskId,
-                parentTaskInstanceId: task.parentTask?.taskInstanceId, 
-                taskOutput: agentTaskResponse.taskOutput, 
-                taskInput: task.taskInputData
-            });
+            taskStatus.executionTimeMs = Date.now() - taskStatus.startedAt.getTime();
+            taskStatus.status = status;
+            taskStatus.stopReason = agentTaskResponse.stopReason;
+            taskStatus.taskOutput = agentTaskResponse.taskOutput;
+            
+            await taskTracker.trackTaskStatus(taskStatus);
 
             // 4. Check the Stop Reason
             // 4.1. If 'subtasks', then spawn the subtasks. 
@@ -142,14 +149,14 @@ export class TaskExecution {
                     // 5.3. If the parent task is now completed, notify the parent task's agent
                     if (mustNotifyParent) {
 
-                        logger.compute(cid, `Notifying parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] that all subtasks are completed.`, "info");
-
                         // Get the subtasksGroupId of the batch of subtasks that were executed
                         const completedSubtask = await taskTracker.findTaskByInstanceId(task.taskInstanceId);
 
                         if (!completedSubtask) throw new TotoRuntimeError(500, `Inconsistent state: completed subtask [${task.taskId} - ${task.taskInstanceId}] not found in tracking database.`);
 
                         const subtaskGroupId = completedSubtask.subtaskGroupId!;
+
+                        logger.compute(cid, `Notifying parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] that all subtasks of group [${subtaskGroupId}] are completed.`, "info");
 
                         // Get the output data of all the completed child tasks to be able to send the output data to the parent task if needed
                         const completedChildren = await taskTracker.findChildrenWithSubtaskGroupId(completedSubtask.parentTaskInstanceId!, subtaskGroupId);
@@ -159,7 +166,7 @@ export class TaskExecution {
                         // Find the parent
                         const parentTask = await taskTracker.findTaskByInstanceId(completedSubtask.parentTaskInstanceId!);
 
-                        // Publish a message to notify the parent task's agent that all subtasks are completed 
+                        // Publish a message to notify the parent task's agent that all subtasks are completed. The parent task will be a NEW INSTANCE of the task (stateless, so with new task instance Id)
                         const agentTaskRequest = new AgentTaskRequest({
                             command: {
                                 command: "resume",
@@ -167,7 +174,7 @@ export class TaskExecution {
                             },
                             correlationId: completedSubtask.correlationId,
                             taskId: completedSubtask.parentTaskId!,
-                            taskInstanceId: completedSubtask.parentTaskInstanceId!,
+                            taskInstanceId: null,   // Important: new instance of the parent task since stateless and should be tracked separately. 
                             taskInputData: { 
                                 originalInput: parentTask?.taskInput,
                                 childrenOutputs 
@@ -227,7 +234,8 @@ export class TaskExecution {
                 taskId: subtask.taskId,
                 taskInstanceId: uuidv4(),
                 taskInputData: subtask.taskInputData,
-                parentTask: parentTask
+                parentTask: parentTask, 
+                subtaskGroupId: subtaskGroupId
             });
 
             // Publish the subtask to the message bus
@@ -237,20 +245,6 @@ export class TaskExecution {
 
                     // 1. Publish the task to the bus
                     await bus.publishTask(agentTaskRequest, this.cid);
-
-                    // 2. Save a record
-                    await taskTracker.trackTaskStatus({
-                        correlationId: parentTask.correlationId,
-                        taskId: agentTaskRequest.taskId,
-                        taskInstanceId: agentTaskRequest.taskInstanceId!,
-                        startedAt: new Date(),
-                        status: "published",
-                        parentTaskId: parentTask.taskId,
-                        parentTaskInstanceId: parentTask.taskInstanceId,
-                        subtaskGroupId: subtaskGroupId, 
-                        taskOutput: null, 
-                        taskInput: agentTaskRequest.taskInputData
-                    });
 
                     this.execContext.logger.compute(this.cid, `Subtask [${subtask.taskId}] successfully spawned.`, "info");
 

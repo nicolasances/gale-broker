@@ -93,6 +93,19 @@ export class TaskTracker {
     }
 
     /**
+     * This method finds all root tasks (tasks without a parent).
+     * This would typically be used to get a list of all tasks that were started independently (e.g. by a user or a process). 
+     * 
+     * @returns the list of root task status records
+     */
+    async findAllRoots(): Promise<TaskStatusRecord[]> {
+
+        const collection = this.db.collection(this.config.getCollections().tasks).find({$or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }]}).sort({ startedAt: -1 });
+
+        return (await collection.toArray()).map(doc => doc as any as TaskStatusRecord);
+    }
+
+    /**
      * Checks if all sibling tasks of the given parent task are completed.
      * 
      * @param parentTaskInstanceId the task instance id of the parent of the task to check
@@ -119,8 +132,9 @@ export interface TaskStatusRecord {
     executionTimeMs?: number; // Execution time, in milliseconds
     parentTaskId?: string; // If this is a subtask, the parent task ID
     parentTaskInstanceId?: string; // If this is a subtask, the parent task instance ID
+    resumedAfterSubtasksGroupId?: string; // If this is a task that is resumed after a subtasks group finished, track the group ID here
     subtaskGroupId?: string; // If this is a subtask, the group ID of the subtask batch
-    taskOutput: any; // The output produced by the task execution
+    taskOutput?: any; // The output produced by the task execution
     taskInput: any; // The input data provided to the task execution
 }
 
