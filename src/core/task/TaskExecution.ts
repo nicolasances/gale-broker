@@ -246,20 +246,6 @@ export class TaskExecution {
                     // 1. Publish the task to the bus
                     await bus.publishTask(agentTaskRequest, this.cid);
 
-                    // 2. Save a record
-                    // await taskTracker.trackTaskStatus({
-                    //     correlationId: parentTask.correlationId,
-                    //     taskId: agentTaskRequest.taskId,
-                    //     taskInstanceId: agentTaskRequest.taskInstanceId!,
-                    //     startedAt: new Date(),
-                    //     status: "published",
-                    //     parentTaskId: parentTask.taskId,
-                    //     parentTaskInstanceId: parentTask.taskInstanceId,
-                    //     subtaskGroupId: subtaskGroupId, 
-                    //     taskOutput: null, 
-                    //     taskInput: agentTaskRequest.taskInputData
-                    // });
-
                     this.execContext.logger.compute(this.cid, `Subtask [${subtask.taskId}] successfully spawned.`, "info");
 
                     resolve();
