@@ -176,7 +176,7 @@ export class TaskExecution {
                             taskId: completedSubtask.parentTaskId!,
                             taskInstanceId: null,   // Important: new instance of the parent task since stateless and should be tracked separately. 
                             taskInputData: { 
-                                originalInput: parentTask?.taskInput,
+                                originalInput: parentTask?.taskInput.originalInput || parentTask?.taskInput,
                                 childrenOutputs 
                             },
                         });

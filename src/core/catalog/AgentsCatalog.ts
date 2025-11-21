@@ -87,7 +87,7 @@ export class AgentsCatalog {
         const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
         const result = await agentsCollection.updateOne(
-            { name: agentDefinition.name },
+            { taskId: agentDefinition.taskId },
             { $set: { ...agentDefinition } },
             { upsert: true }
         );
