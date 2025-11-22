@@ -61,14 +61,12 @@ export class AgentTaskResponse {
     taskOutput?: any;          // Output data produced by the task execution.
 
     subtasks?: SubTaskInfo[]; // Information about any subtasks that need to be executed as part of this task. This is used for tasks that decompose into multiple subtasks.
-    subtasksGroupId?: string; // Optional group ID to group related subtasks together. This is mandatory is subtasks are returned: it will allow Gale to tell the agent that spawned them when all subtasks are completed.
 
-    constructor(stopReason: StopReason, correlationId: string, taskOutput?: any, subtasks?: SubTaskInfo[], subtasksGroupId?: string) {
+    constructor(stopReason: StopReason, correlationId: string, taskOutput?: any, subtasks?: SubTaskInfo[]) {
         this.stopReason = stopReason;
         this.taskOutput = taskOutput;
         this.subtasks = subtasks;
         this.correlationId = correlationId;
-        this.subtasksGroupId = subtasksGroupId;
     }
 
     static fromHTTPResponse(body: any): AgentTaskResponse {
@@ -80,14 +78,12 @@ export class AgentTaskResponse {
             if (!parsed.correlationId) throw new ValidationError(400, "Missing required field 'correlationId' in AgentTaskResponse. An Agent always needs to return the correlation ID it received when triggered.");
 
             if (parsed.stopReason === 'subtasks' && !parsed.subtasks) throw new ValidationError(400, "AgentTaskResponse with stopReason 'subtasks' must include 'subtasks' field.");
-            if (parsed.stopReason === 'subtasks' && !parsed.subtasksGroupId) throw new ValidationError(400, "AgentTaskResponse with stopReason 'subtasks' must include 'subtasksGroupId' field.");
 
             return new AgentTaskResponse(
                 parsed.stopReason,
                 parsed.correlationId,
                 parsed.taskOutput,
                 parsed.subtasks,
-                parsed.subtasksGroupId
             );
 
         } catch (error) {
@@ -99,7 +95,8 @@ export class AgentTaskResponse {
 
 export interface SubTaskInfo {
     taskId: TaskId;             // Unique identifier of the subtask to be executed.
-    taskInputData?: any;  // Input data needed for the subtask execution.
+    subtasksGroupId: string;    // Unique Group ID to group related subtasks together.
+    taskInputData?: any;        // Input data needed for the subtask execution.
 }
 
 export type StopReason = "completed" | "failed" | "subtasks";

@@ -122,7 +122,7 @@ export class TaskExecution {
 
                 logger.compute(cid, `Spawning [${agentTaskResponse.subtasks.length}] subtasks for parent task [${task.taskId}].`, "info");
 
-                await this.spawnSubtasks(agentTaskResponse.subtasks, agentTaskResponse.subtasksGroupId!, {
+                await this.spawnSubtasks(agentTaskResponse.subtasks, {
                     correlationId: correlationId,
                     taskId: task.taskId,
                     taskInstanceId: task.taskInstanceId
@@ -217,7 +217,7 @@ export class TaskExecution {
      * 
      * @param subtasks subtasks to be spawn off
      */
-    private async spawnSubtasks(subtasks: SubTaskInfo[], subtaskGroupId: string, parentTask: ParentTaskInfo, taskTracker: TaskTracker): Promise<void> {
+    private async spawnSubtasks(subtasks: SubTaskInfo[], parentTask: ParentTaskInfo, taskTracker: TaskTracker): Promise<void> {
 
         const bus = this.config.messageBus;
 
@@ -235,7 +235,7 @@ export class TaskExecution {
                 taskInstanceId: uuidv4(),
                 taskInputData: subtask.taskInputData,
                 parentTask: parentTask, 
-                subtaskGroupId: subtaskGroupId
+                subtaskGroupId: subtask.subtasksGroupId
             });
 
             // Publish the subtask to the message bus
