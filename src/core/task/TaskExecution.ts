@@ -132,19 +132,19 @@ export class TaskExecution {
             // 5. If this is a subtask running and it completed, check if all sibling subtasks are completed, and if so, notify the parent task.
             if (task.parentTask && agentTaskResponse.stopReason === 'completed') {
 
-                logger.compute(cid, `Subtask [${task.taskId} - ${task.taskInstanceId}] completed. Checking if all siblings spawned by parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] are done.`, "info");
+                logger.compute(cid, `Subtask [${task.taskId} - ${task.taskInstanceId}] completed. Checking if all siblings spawned by parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] with group [${task.subtaskGroupId}] are done.`, "info");
 
                 // 5.1. Check if all sibling subtasks are completed
-                const allSiblingsCompleted = await taskTracker.areSiblingsCompleted(task.parentTask.taskInstanceId);
+                const allSiblingsCompleted = await taskTracker.areSiblingsCompleted(task.parentTask.taskInstanceId, task.subtaskGroupId!);
 
-                logger.compute(cid, `Siblings completion status for parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}]: ${allSiblingsCompleted}`, "info");
+                logger.compute(cid, `Siblings completion status for parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] with group [${task.subtaskGroupId}] : ${allSiblingsCompleted}`, "info");
 
                 // 5.2. If so, update the parent task status 
                 if (allSiblingsCompleted) {
 
-                    logger.compute(cid, `All sibling subtasks for parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] are completed. Updating parent task status.`, "info");
+                    logger.compute(cid, `All sibling subtasks for parent task [${task.parentTask.taskId} - ${task.parentTask.taskInstanceId}] with group [${task.subtaskGroupId}] are completed. Updating parent task status.`, "info");
 
-                    const mustNotifyParent = await taskTracker.flagParentAsChildrenCompleted(task.parentTask.taskInstanceId);
+                    const mustNotifyParent = await taskTracker.flagParentAsChildrenCompleted(task.parentTask.taskInstanceId, task.subtaskGroupId!);
 
                     // 5.3. If the parent task is now completed, notify the parent task's agent
                     if (mustNotifyParent) {
