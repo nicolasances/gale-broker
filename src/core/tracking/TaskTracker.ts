@@ -49,7 +49,7 @@ export class TaskTracker {
      * @returns 
      */
     async findChildrenWithSubtaskGroupId(parentTaskInstanceId: string, subtaskGroupId: string): Promise<TaskStatusRecord[]> {
-        
+
         const children = await this.db.collection(this.config.getCollections().tasks).find({ parentTaskInstanceId, subtaskGroupId }).toArray();
 
         return children.map(doc => doc as any as TaskStatusRecord);
@@ -65,17 +65,17 @@ export class TaskTracker {
      * 
      * @returns true if the parent task was successfully marked as 'childrenCompleted', false if it was already marked.
      */
-    async flagParentAsChildrenCompleted(parentTaskInstanceId: string): Promise<boolean> {
-        
-        const collection = this.db.collection(this.config.getCollections().tasks);
+    async flagParentAsChildrenCompleted(parentTaskInstanceId: string, completedSubtaskGroupId: string): Promise<boolean> {
+
+        const collection = this.db.collection(this.config.getCollections().subgroupTracking);
 
         const result = await collection.updateOne(
-            { taskInstanceId: parentTaskInstanceId },
+            { taskInstanceId: parentTaskInstanceId, subtaskGroupId: completedSubtaskGroupId },
             { $set: { status: 'childrenCompleted' } },
             { upsert: true }
         );
 
-        return result.modifiedCount > 0;
+        return result.modifiedCount > 0 || result.upsertedCount > 0;
     }
 
     /**
@@ -100,7 +100,7 @@ export class TaskTracker {
      */
     async findAllRoots(): Promise<TaskStatusRecord[]> {
 
-        const collection = this.db.collection(this.config.getCollections().tasks).find({$or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }]}).sort({ startedAt: -1 });
+        const collection = this.db.collection(this.config.getCollections().tasks).find({ $or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }] }).sort({ startedAt: -1 });
 
         return (await collection.toArray()).map(doc => doc as any as TaskStatusRecord);
     }
@@ -110,9 +110,9 @@ export class TaskTracker {
      * 
      * @param parentTaskInstanceId the task instance id of the parent of the task to check
      */
-    async areSiblingsCompleted(parentTaskInstanceId: string): Promise<boolean> {
+    async areSiblingsCompleted(parentTaskInstanceId: string, subtaskGroupId: string): Promise<boolean> {
 
-        const siblingTasks = await this.db.collection(this.config.getCollections().tasks).find({ parentTaskInstanceId }).toArray() as any as TaskStatusRecord[];
+        const siblingTasks = await this.db.collection(this.config.getCollections().tasks).find({ parentTaskInstanceId, subtaskGroupId }).toArray() as any as TaskStatusRecord[];
 
         if (siblingTasks.length === 0) return true;
 
@@ -138,4 +138,4 @@ export interface TaskStatusRecord {
     taskInput: any; // The input data provided to the task execution
 }
 
-export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenCompleted"; 
+export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenTriggered"; 

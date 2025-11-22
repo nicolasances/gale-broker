@@ -41,37 +41,48 @@ export class TaskExecutionGraph {
  * @param records the complete set of task execution records to build the graph from 
  * @returns the list of children of the current node
  */
-function buildNext(currentNode: TaskStatusRecord, records: TaskStatusRecord[]): SubtaskGroupNode | TaskExecutionGraphNode | null {
+function buildNext(currentNode: TaskStatusRecord, records: TaskStatusRecord[]): SubtaskGroupNode[] | TaskExecutionGraphNode | null {
 
     const childRecords = records.filter(r => r.parentTaskInstanceId === currentNode.taskInstanceId);
 
     if (childRecords && childRecords.length > 0) {
 
-        // Create the group 
-        const group : SubtaskGroupNode = {
-            groupId: childRecords[0].subtaskGroupId!,
-            nodes: childRecords.map((record) => {
-                const childNode: TaskExecutionGraphNode = {
-                    record: record,
-                    next: buildNext(record, records)
-                };
-                return childNode;
-            }), 
-            next: buildNextFromGroup(childRecords[0].subtaskGroupId!, records)
+        // Check if there are multiple subtask groups
+        const subtaskGroups = Array.from(new Set(childRecords.map(r => r.subtaskGroupId).filter(gid => gid !== undefined)));
+
+        const groups: SubtaskGroupNode[] = [];
+
+        // Create a group for each subtask group
+        for (const groupId of subtaskGroups) {
+
+            // Create the group 
+            const group: SubtaskGroupNode = {
+                groupId: groupId!,
+                nodes: childRecords.filter(r => r.subtaskGroupId === groupId).map((record) => {
+                    const childNode: TaskExecutionGraphNode = {
+                        record: record,
+                        next: buildNext(record, records)
+                    };
+                    return childNode;
+                }),
+                next: buildNextFromGroup(groupId!, records)
+            }
+
+            groups.push(group);
         }
 
-        return group;
+        return groups;
     }
 
     // There are no children
     return null;
 }
 
-function buildNextFromGroup(groupId: string, records: TaskStatusRecord[]): SubtaskGroupNode | TaskExecutionGraphNode | null {
+function buildNextFromGroup(groupId: string, records: TaskStatusRecord[]): SubtaskGroupNode[] | TaskExecutionGraphNode | null {
 
     const resumedRecord = records.find(r => r.resumedAfterSubtasksGroupId === groupId);
 
-    if (!resumedRecord) return null; 
+    if (!resumedRecord) return null;
 
     return {
         record: resumedRecord,
@@ -82,12 +93,12 @@ function buildNextFromGroup(groupId: string, records: TaskStatusRecord[]): Subta
 export interface TaskExecutionGraphNode {
 
     record: TaskStatusRecord
-    next: SubtaskGroupNode | TaskExecutionGraphNode | null
+    next: SubtaskGroupNode[] | TaskExecutionGraphNode | null
 
 }
 
 export interface SubtaskGroupNode {
     groupId: string;
     nodes: TaskExecutionGraphNode[];
-    next: SubtaskGroupNode | TaskExecutionGraphNode | null;
+    next: SubtaskGroupNode[] | TaskExecutionGraphNode | null;
 }

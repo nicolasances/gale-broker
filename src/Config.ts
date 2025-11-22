@@ -7,6 +7,7 @@ const dbName = 'galebroker';
 const collections = {
     agents: 'agents',
     tasks: 'tasks',
+    subgroupTracking: 'subgroupTracking',
     flows: 'flows',
 };
 
