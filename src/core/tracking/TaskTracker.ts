@@ -138,4 +138,4 @@ export interface TaskStatusRecord {
     taskInput: any; // The input data provided to the task execution
 }
 
-export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenCompleted"; 
+export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenTriggered"; 

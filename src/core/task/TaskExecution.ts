@@ -99,7 +99,7 @@ export class TaskExecution {
                     status = 'failed';
                     break;
                 case 'subtasks':
-                    status = 'waiting';
+                    status = 'childrenTriggered';
                     break;
                 default:
                     status = 'started';
