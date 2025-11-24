@@ -1,8 +1,10 @@
 import { Db } from "mongodb";
 import { ExecutionContext } from "toto-api-controller";
-import { TaskId } from "../../model/AgentTask";
+import { AgentTaskRequest, ParentTaskInfo, SubTaskInfo, TaskId } from "../../model/AgentTask";
 import { GaleConfig } from "../../Config";
 import { StopReason } from "../../model/AgentTask";
+import { AgentDefinition } from "../../model/AgentDefinition";
+import { v4 as uuidv4 } from 'uuid';
 
 export class TaskTracker {
 
@@ -27,6 +29,151 @@ export class TaskTracker {
             { upsert: true }
         );
 
+    }
+
+    /**
+     * Tracks the start of a root task (a task without a parent).
+     * IMPORTANT: this method expects taskInstanceId and correlationId to have been already set on the task.
+     * IMPORTANT: this method does NOT track the RESUMPTION of a parent task after its subtasks are completed.
+     * 
+     * Creates a new record in the tasks collection with status 'started'.
+     */
+    async trackRootTaskStatusUpdate(task: AgentTaskRequest, agentDefinition: AgentDefinition, status: Status, resumedAfterSubtasksGroupId?: string): Promise<TaskStatusRecord> {
+
+        // Create the task status record
+        const record: TaskStatusRecord = {
+            correlationId: task.correlationId!,
+            taskId: task.taskId,
+            agentName: agentDefinition.name,
+            taskInstanceId: task.taskInstanceId!,
+            startedAt: new Date(Date.now()),
+            status: status,
+            taskInput: task.taskInputData,
+        }
+
+        if (resumedAfterSubtasksGroupId) record.resumedAfterSubtasksGroupId = resumedAfterSubtasksGroupId;
+
+        // Insert the record into the database
+        const collection = this.db.collection(this.config.getCollections().tasks);
+
+        await collection.insertOne(record);
+
+        return record;
+    }
+
+    async trackRootTaskStarted(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<TaskStatusRecord> {
+        return this.trackRootTaskStatusUpdate(task, agentDefinition, "started");
+    }
+
+    /**
+     * Tracks the resumption of a root task (a task without a parent that has been resumed as per a 'resume' command).
+     * 
+     * @param task the task
+     * @param agentDefinition the agent definition
+     * @param correlationId the correlation Id
+     * @returns 
+     */
+    async trackRootTaskResumed(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<TaskStatusRecord> {
+        return this.trackRootTaskStatusUpdate(task, agentDefinition, "resumed", task.command.completedSubtaskGroupId);
+    }
+
+    /**
+     * Tracks that a subtask has been sent by the parent task to Gale Broker for execution 
+     * 
+     * @param subtask the subtask to track
+     * @param parentTask the parent task
+     * @returns the inserted record
+     */
+    async trackSubtaskRequested(subtask: SubTaskInfo, parentTask: ParentTaskInfo,): Promise<TaskStatusRecord> {
+
+        // Create the task status record
+        const taskStatus: TaskStatusRecord = {
+            correlationId: parentTask.correlationId,
+            taskId: subtask.taskId,
+            taskInstanceId: uuidv4(),
+            startedAt: new Date(Date.now()),
+            status: "published",
+            parentTaskId: parentTask.taskId,
+            parentTaskInstanceId: parentTask.taskInstanceId,
+            subtaskGroupId: subtask.subtasksGroupId,
+            taskInput: subtask.taskInputData
+        }
+
+        // Insert the record into the database
+        const collection = this.db.collection(this.config.getCollections().tasks);
+
+        await collection.insertOne(taskStatus);
+
+        return taskStatus;
+
+    }
+
+    /**
+     * Tracks the start of a subtask.
+     * 
+     * @param taskInstanceId the task instance id
+     * @param agentDefinition the definition of the agent
+     */
+    async trackSubtaskStarted(taskInstanceId: string, agentDefinition: AgentDefinition): Promise<void> {
+
+        const collection = this.db.collection(this.config.getCollections().tasks);
+
+        await collection.updateOne(
+            { taskInstanceId },
+            { $set: { status: "started", agentName: agentDefinition.name, startedAt: new Date(Date.now()) } }
+        );
+    }
+
+    /**
+     * Tracks the completion of a task.
+     * The completion of a task tracks the following updates: 
+     * - status
+     * - stopReason
+     * - executionTimeMs
+     * - taskOutput
+     * 
+     * @param taskInstanceId the task instance id   
+     * @param stopReason the reason why the task stopped
+     * @param taskOutput the output produced by the task    
+     */
+    async trackTaskCompletion(taskInstanceId: string, stopReason: StopReason, taskOutput: any): Promise<void> {
+
+        const collection = this.db.collection(this.config.getCollections().tasks);
+
+        // Read the existing record to calculate execution time
+        const existingRecord = await collection.findOne({ taskInstanceId }) as any as TaskStatusRecord | null;
+
+        if (!existingRecord) throw new Error(`Cannot track completion for unknown taskInstanceId: ${taskInstanceId}`);
+
+        const executionTimeMs = Date.now() - existingRecord.startedAt.getTime();
+
+        // Update the record with completion details
+        let status: Status;
+        switch (stopReason) {
+            case 'completed':
+                status = 'completed';
+                break;
+            case 'failed':
+                status = 'failed';
+                break;
+            case 'subtasks':
+                status = 'childrenTriggered';
+                break;
+            default:
+                status = 'started';
+                break;
+        }
+
+        const updateStatement = {
+            $set: {
+                status: status,
+                stopReason: stopReason,
+                executionTimeMs: executionTimeMs,
+                taskOutput: taskOutput
+            }
+        };
+
+        await collection.updateOne({ taskInstanceId }, updateStatement);
     }
 
     /**
@@ -100,7 +247,12 @@ export class TaskTracker {
      */
     async findAllRoots(): Promise<TaskStatusRecord[]> {
 
-        const collection = this.db.collection(this.config.getCollections().tasks).find({ $or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }] }).sort({ startedAt: -1 });
+        const collection = this.db.collection(this.config.getCollections().tasks).find({
+            $and: [
+                { $or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }] },
+                { $or: [{ resumedAfterSubtasksGroupId: { $exists: false } }, { resumedAfterSubtasksGroupId: null }] }
+            ]
+        }).sort({ startedAt: -1 });
 
         return (await collection.toArray()).map(doc => doc as any as TaskStatusRecord);
     }
@@ -138,4 +290,4 @@ export interface TaskStatusRecord {
     taskInput: any; // The input data provided to the task execution
 }
 
-export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenTriggered"; 
+export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenTriggered" | "resumed"; 

@@ -45,12 +45,26 @@ export class AgentsCatalog {
     }
 
     /**
+     * Retrieves a specific agent by its taskId.
+     * @param taskId the task id that the agent is implementing
+     * @returns 
+     */
+    async getAgent(taskId: TaskId): Promise<AgentDefinition> {
+
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
+
+        const agentData = await agentsCollection.findOne({ taskId: taskId });
+
+        return AgentDefinition.fromBSON(agentData);
+    }
+
+    /**
      * Deletes all agents that can execute the given taskId.
      * @param taskId the task type to find all agents to delete
      * @returns 
      */
     async deleteAgentsWithTaskId(taskId: TaskId): Promise<number> {
-        const agentsCollection = this.db.collection(this.config.getCollections().agents);   
+        const agentsCollection = this.db.collection(this.config.getCollections().agents);
         const result = await agentsCollection.deleteMany({ taskId: taskId });
         return result.deletedCount || 0;
     }

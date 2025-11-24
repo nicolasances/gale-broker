@@ -12,6 +12,7 @@ import { IMessageBus, MessageBusFactory } from "./bus/MessageBus";
 import { GetAgents } from "./dlg/catalog/GetAgents";
 import { DeleteAgent } from "./dlg/catalog/DeleteAgent";
 import { GetRootTasks } from "./dlg/tracking/GetRootTasks";
+import { GetAgent } from "./dlg/catalog/GetAgent";
 
 export const APINAME = "gale-broker";
 
@@ -46,6 +47,7 @@ api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'applica
 api.path('PUT', '/catalog/agents', new UpdateAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false });    // Temporary, until API-key based auth is implemented.
 api.path('GET', '/catalog/agents', new GetAgents());
 api.path('DELETE', '/catalog/agents/:taskId', new DeleteAgent());
+api.path('GET', '/catalog/agents/:taskId', new GetAgent());
 
 // Endpoints related to Agent Executions
 api.path('POST', '/tasks', new PostTask());
