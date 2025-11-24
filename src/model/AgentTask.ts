@@ -99,6 +99,12 @@ export interface SubTaskInfo {
     taskInputData?: any;        // Input data needed for the subtask execution.
 }
 
+export interface ParentTaskInfo {
+    correlationId: string;
+    taskId: string;
+    taskInstanceId: string;
+}
+
 export type StopReason = "completed" | "failed" | "subtasks";
 
 export interface Command {

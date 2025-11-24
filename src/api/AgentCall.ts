@@ -22,7 +22,7 @@ export class AgentCall {
      * @param agentInput any input data to provide to the agent. This is agent-specific.
      * @returns a promise that resolves to the agent trigger response.
      */
-    async execute(task: AgentTaskRequest): Promise<AgentTaskResponse> {
+    async execute(task: AgentTaskRequest, correlationId: string): Promise<AgentTaskResponse> {
 
         this.execContext.logger.compute(this.execContext.cid, `Calling Agent [${this.agentDefinition.name}] at [${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.executionPath}]`);
 
@@ -36,7 +36,7 @@ export class AgentCall {
                     'Authorization': this.bearerToken ? `Bearer ${this.bearerToken}` : null,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify(task)
+                body: JSON.stringify({...task, correlationId})
             }, (err: any, resp: any, body: any) => {
 
 
