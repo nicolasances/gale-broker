@@ -238,6 +238,21 @@ export class TaskExecution {
                 subtaskGroupId: subtask.subtasksGroupId
             });
 
+            // 2. Track the subtask as 'started' in the tracking database
+            const taskStatus: TaskStatusRecord = {
+                correlationId: parentTask.correlationId,
+                taskId: subtask.taskId,
+                taskInstanceId: uuidv4(), 
+                startedAt: new Date(Date.now()),
+                status: "started",
+                parentTaskId: parentTask.taskId,
+                parentTaskInstanceId: parentTask.taskInstanceId,
+                subtaskGroupId: subtask.subtasksGroupId,
+                taskInput: subtask.taskInputData
+            }
+
+            await taskTracker.trackTaskStatus(taskStatus);
+
             // Publish the subtask to the message bus
             publishPromises.push(new Promise<void>(async (resolve, reject) => {
 
