@@ -33,26 +33,25 @@ export class TaskTracker {
 
     /**
      * Tracks the start of a root task (a task without a parent).
+     * IMPORTANT: this method expects taskInstanceId and correlationId to have been already set on the task.
      * IMPORTANT: this method does NOT track the RESUMPTION of a parent task after its subtasks are completed.
-     * 
-     * That means that the correlation ID is expected to not exist.
      * 
      * Creates a new record in the tasks collection with status 'started'.
      */
-    async trackRootTaskStarted(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<TaskStatusRecord> {
-
-        const taskInstanceId = task.taskInstanceId || uuidv4();
+    async trackRootTaskStatusUpdate(task: AgentTaskRequest, agentDefinition: AgentDefinition, status: Status, resumedAfterSubtasksGroupId?: string): Promise<TaskStatusRecord> {
 
         // Create the task status record
         const record: TaskStatusRecord = {
-            correlationId: uuidv4(),
+            correlationId: task.correlationId!,
             taskId: task.taskId,
             agentName: agentDefinition.name,
-            taskInstanceId: taskInstanceId,
+            taskInstanceId: task.taskInstanceId!,
             startedAt: new Date(Date.now()),
-            status: "started",
-            taskInput: task.taskInputData
+            status: status,
+            taskInput: task.taskInputData,
         }
+
+        if (resumedAfterSubtasksGroupId) record.resumedAfterSubtasksGroupId = resumedAfterSubtasksGroupId;
 
         // Insert the record into the database
         const collection = this.db.collection(this.config.getCollections().tasks);
@@ -60,6 +59,10 @@ export class TaskTracker {
         await collection.insertOne(record);
 
         return record;
+    }
+
+    async trackRootTaskStarted(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<TaskStatusRecord> {
+        return this.trackRootTaskStatusUpdate(task, agentDefinition, "started");
     }
 
     /**
@@ -70,35 +73,18 @@ export class TaskTracker {
      * @param correlationId the correlation Id
      * @returns 
      */
-    async trackRootTaskResumed(task: AgentTaskRequest, agentDefinition: AgentDefinition, correlationId: string): Promise<TaskStatusRecord> {
-
-        // Create the task status record
-        const record: TaskStatusRecord = {
-            correlationId: correlationId,
-            taskId: task.taskId,
-            agentName: agentDefinition.name,
-            taskInstanceId: task.taskInstanceId!,
-            startedAt: new Date(Date.now()),
-            status: "resumed",
-            taskInput: task.taskInputData
-        }
-
-        // Insert the record into the database
-        const collection = this.db.collection(this.config.getCollections().tasks);
-
-        await collection.insertOne(record);
-
-        return record;
+    async trackRootTaskResumed(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<TaskStatusRecord> {
+        return this.trackRootTaskStatusUpdate(task, agentDefinition, "resumed", task.command.completedSubtaskGroupId);
     }
 
     /**
-     * Tracks the start of a subtask.
+     * Tracks that a subtask has been sent by the parent task to Gale Broker for execution 
      * 
      * @param subtask the subtask to track
      * @param parentTask the parent task
      * @returns the inserted record
      */
-    async trackSubtaskStarted(subtask: SubTaskInfo, parentTask: ParentTaskInfo,): Promise<TaskStatusRecord> {
+    async trackSubtaskRequested(subtask: SubTaskInfo, parentTask: ParentTaskInfo,): Promise<TaskStatusRecord> {
 
         // Create the task status record
         const taskStatus: TaskStatusRecord = {
@@ -106,7 +92,7 @@ export class TaskTracker {
             taskId: subtask.taskId,
             taskInstanceId: uuidv4(),
             startedAt: new Date(Date.now()),
-            status: "started",
+            status: "published",
             parentTaskId: parentTask.taskId,
             parentTaskInstanceId: parentTask.taskInstanceId,
             subtaskGroupId: subtask.subtasksGroupId,
@@ -120,6 +106,22 @@ export class TaskTracker {
 
         return taskStatus;
 
+    }
+
+    /**
+     * Tracks the start of a subtask.
+     * 
+     * @param taskInstanceId the task instance id
+     * @param agentDefinition the definition of the agent
+     */
+    async trackSubtaskStarted(taskInstanceId: string, agentDefinition: AgentDefinition): Promise<void> {
+
+        const collection = this.db.collection(this.config.getCollections().tasks);
+
+        await collection.updateOne(
+            { taskInstanceId },
+            { $set: { status: "started", agentName: agentDefinition.name, startedAt: new Date(Date.now()) } }
+        );
     }
 
     /**
@@ -247,8 +249,8 @@ export class TaskTracker {
 
         const collection = this.db.collection(this.config.getCollections().tasks).find({
             $and: [
-                {$or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }]},
-                {$or: [{ resumedAfterSubtasksGroupId: { $exists: false } }, { resumedAfterSubtasksGroupId: null }]}
+                { $or: [{ parentTaskInstanceId: { $exists: false } }, { parentTaskInstanceId: null }] },
+                { $or: [{ resumedAfterSubtasksGroupId: { $exists: false } }, { resumedAfterSubtasksGroupId: null }] }
             ]
         }).sort({ startedAt: -1 });
 
