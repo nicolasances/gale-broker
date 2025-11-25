@@ -47,6 +47,13 @@ function example() {
 
 function buildingComputationTree() {
 
+    const start = (): any => {};
+    const parallelize = (name: string, agents: any[]): any => {};
+    const agent = () => {};
+    const end = () => {};
+    const branch = (name: string, nodes: any[]) => {};
+    const next = () => {};
+
     start().branch("B1", [
         parallelize("group-section-classification", [
             agent(), agent(), agent()
