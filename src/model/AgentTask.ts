@@ -57,15 +57,17 @@ export interface ParentTask {
 export class AgentTaskResponse {
 
     correlationId: string; // Correlation ID to group related tasks together.
-    stopReason: "completed" | "failed" | "subtasks"; // Reason why the task execution stopped.
+    stopReason: "completed" | "failed" | "subtasks" | "branch"; // Reason why the task execution stopped.
     taskOutput?: any;          // Output data produced by the task execution.
 
     subtasks?: SubTaskInfo[]; // Information about any subtasks that need to be executed as part of this task. This is used for tasks that decompose into multiple subtasks.
+    branches?: BranchInfo[];
 
-    constructor(stopReason: StopReason, correlationId: string, taskOutput?: any, subtasks?: SubTaskInfo[]) {
+    constructor(stopReason: StopReason, correlationId: string, taskOutput?: any, subtasks?: SubTaskInfo[], branches?: BranchInfo[]) {
         this.stopReason = stopReason;
         this.taskOutput = taskOutput;
         this.subtasks = subtasks;
+        this.branches = branches;
         this.correlationId = correlationId;
     }
 
@@ -84,6 +86,7 @@ export class AgentTaskResponse {
                 parsed.correlationId,
                 parsed.taskOutput,
                 parsed.subtasks,
+                parsed.branches
             );
 
         } catch (error) {
@@ -91,6 +94,11 @@ export class AgentTaskResponse {
             throw error;
         }
     }
+}
+
+export interface BranchInfo {
+    branchName: string;         // Name of the branch.
+    subtasks: SubTaskInfo[];    // List of subtasks in the branch.
 }
 
 export interface SubTaskInfo {
@@ -105,7 +113,7 @@ export interface ParentTaskInfo {
     taskInstanceId: string;
 }
 
-export type StopReason = "completed" | "failed" | "subtasks";
+export type StopReason = "completed" | "failed" | "subtasks" | "branch";
 
 export interface Command {
     command: "start" | "resume";
