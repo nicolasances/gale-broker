@@ -22,7 +22,7 @@ export class GaleMessageHandler {
         switch (msg.type) {
             case 'task':
                 // Trigger a task execution
-                await new TaskExecution(execContext, token).startTask(AgentTaskRequest.fromHTTPRequest({ body: msg.payload }));
+                await new TaskExecution(execContext, token).do(AgentTaskRequest.fromHTTPRequest({ body: msg.payload }));
                 break;
             default:
                 logger.compute("", `Unknown event type [${msg.type}] received`);

@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { ExecutionContext } from "toto-api-controller";
-import { AgentTaskRequest, ParentTaskInfo, SubTaskInfo, TaskId } from "../../model/AgentTask";
+import { AgentTaskRequest, ParentTaskInfo, TaskInfo, TaskId } from "../../model/AgentTask";
 import { GaleConfig } from "../../Config";
 import { StopReason } from "../../model/AgentTask";
 import { AgentDefinition } from "../../model/AgentDefinition";
@@ -84,7 +84,7 @@ export class TaskTracker {
      * @param parentTask the parent task
      * @returns the inserted record
      */
-    async trackSubtaskRequested(subtask: SubTaskInfo, parentTask: ParentTaskInfo,): Promise<TaskStatusRecord> {
+    async trackSubtaskRequested(subtask: TaskInfo, parentTask: ParentTaskInfo,): Promise<TaskStatusRecord> {
 
         // Create the task status record
         const taskStatus: TaskStatusRecord = {

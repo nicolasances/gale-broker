@@ -11,7 +11,7 @@ export class PostTask implements TotoDelegate {
 
     async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<AgentTaskResponse> {
 
-        const result = await new TaskExecution(execContext, extractBearerToken(req)!).startTask(AgentTaskRequest.fromHTTPRequest(req));
+        const result = await new TaskExecution(execContext, extractBearerToken(req)!).do(AgentTaskRequest.fromHTTPRequest(req));
 
         return result;
 
