@@ -3,7 +3,7 @@ import { Request } from "express";
 import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
 import { TaskExecutionGraph } from "../../util/TaskExecutionGraph";
 import { GaleConfig } from "../../Config";
-import { TaskTracker } from "../../core/tracking/TaskTracker";
+import { TaskTracker } from "../../core/tracking/AgentStatusTracker";
 
 /**
  * This endpoint retrieves all the Tasks associated with a given correlation ID and creates a GRAPH view of their execution.

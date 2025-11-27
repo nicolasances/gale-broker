@@ -2,7 +2,7 @@
 import { Request } from "express";
 import { ExecutionContext, TotoDelegate, UserContext } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { TaskStatusRecord, TaskTracker } from "../../core/tracking/TaskTracker";
+import { TaskStatusRecord, TaskTracker } from "../../core/tracking/AgentStatusTracker";
 
 /**
  * This endpoint retrieves all the root tasks

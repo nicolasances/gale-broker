@@ -3,10 +3,10 @@ import { AgentNotFoundError } from "../../model/error/AgentNotFoundError";
 import { AgentCall } from "../../api/AgentCall";
 import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { TaskStatusRecord, TaskTracker } from "../tracking/TaskTracker";
 import { AgentTaskRequest, AgentTaskResponse, TaskInfo, ParentTaskInfo } from "../../model/AgentTask";
 import { v4 as uuidv4 } from "uuid";
-import { getTaskExecutionScenario, isRootTaskFirstStart, isParentTaskResumption, isSubtaskStart } from "./TaskExecutionUtil";
+import { isRootTaskFirstStart, isParentTaskResumption, isSubtaskStart } from "./TaskExecutionUtil";
+import { AgentStatusTracker } from "../tracking/AgentStatusTracker";
 
 /**
  * This class is responsible for executing tasks, by finding suitable Agents and delegating the execution to them.
@@ -46,7 +46,7 @@ export class TaskExecution {
             const client = await config.getMongoClient();
             const db = client.db(config.getDBName());
 
-            const taskTracker = new TaskTracker(db, this.execContext);
+            const tracker = new AgentStatusTracker(db, this.execContext);
 
             // 0. Find an available Agent that can execute the task.
             const agent = await new AgentsCatalog(db, this.execContext).findAgentByTaskId(task.taskId);
@@ -61,38 +61,47 @@ export class TaskExecution {
                 task.taskInstanceId = uuidv4();
                 task.correlationId = uuidv4();
 
+                // Log the start of the root task
+                await tracker.rootAgentStarted(agent, task);
+
                 // Trigger the agent (orchestrator, most likely)
                 const agentTaskResponse: AgentTaskResponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(task, task.correlationId);
 
                 // Response handling
                 // If you're done, just return: it wasn't an orchestrator flow after all
-                if (agentTaskResponse.stopReason === "completed" || agentTaskResponse.stopReason === "failed") {
-
-                    // Log 
-
-                    // Return 
+                if (agentTaskResponse.stopReason === "completed") {
+                    await tracker.rootAgentCompleted(agent, task, agentTaskResponse);
                     return agentTaskResponse;
                 }
-                else {
-                    // Alright: orchestrator flow
-
-
-                    // Log
+                else if (agentTaskResponse.stopReason === "failed") {
+                    await tracker.rootAgentFailed(agent, task, agentTaskResponse);
+                    return agentTaskResponse;
+                }
+                else if (agentTaskResponse.stopReason === "subtasks") {
+                    await tracker.agentSpawnedSubtasks(agent, task, agentTaskResponse);
 
                     // Spawn subtasks by publishing them to the Message Bus
+
                 }
+                else throw new TotoRuntimeError(500, `Unknown stop reason received from agent ${agent.name} for task ${task.taskId}: ${agentTaskResponse.stopReason}`);
 
             }
             else if (isSubtaskStart(task)) {
+
+                // Tracks
+                await tracker.trackSubtaskStarted(agent, task);
 
                 // I'm executing a subtask
                 const agentTaskResponse: AgentTaskResponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(task, task.correlationId!);
 
                 // Handle the response 
                 if (agentTaskResponse.stopReason === 'failed') {
-                    // TODO
+                    await tracker.subtaskFailed(agent, task, agentTaskResponse);
+
+                    // TODO: resume the parent task with failure info - or retry automatically once before resuming the parent
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
+
                     // TODO: Check if all subtasks in the group are done and if so, RESUME the parent task
 
                     // If not all are done, just return
@@ -114,7 +123,8 @@ export class TaskExecution {
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
                     // If the parent is DONE (no more subtasks), check if it was part of a group 
-                    // - If not, IT WAS THE ROOT TASK => the whole flow is done
+                    // - If not, IT WAS THE ROOT TASK => the whole flow is done 
+                    // NOT CORRECT!!!!! if the left group finished but not the right one and the left one has no more things after but the right one does, I won't be able to handle that
 
                     // - If yes, check if all other tasks in the group are done. 
                     //     - If not return. 

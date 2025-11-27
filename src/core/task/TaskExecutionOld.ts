@@ -3,7 +3,7 @@ import { AgentNotFoundError } from "../../model/error/AgentNotFoundError";
 import { AgentCall } from "../../api/AgentCall";
 import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { TaskStatusRecord, TaskTracker } from "../tracking/TaskTracker";
+import { TaskStatusRecord, TaskTracker } from "../tracking/AgentStatusTracker";
 import { AgentTaskRequest, AgentTaskResponse, TaskInfo, ParentTaskInfo } from "../../model/AgentTask";
 import { v4 as uuidv4 } from "uuid";
 import { getTaskExecutionScenario, isRootTaskFirstStart, isParentTaskResumption, isSubtaskStart } from "./TaskExecutionUtil";

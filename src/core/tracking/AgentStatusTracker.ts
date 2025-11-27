@@ -6,7 +6,7 @@ import { StopReason } from "../../model/AgentTask";
 import { AgentDefinition } from "../../model/AgentDefinition";
 import { v4 as uuidv4 } from 'uuid';
 
-export class TaskTracker {
+export class AgentStatusTracker {
 
     config: GaleConfig;
 
@@ -274,20 +274,23 @@ export class TaskTracker {
 }
 
 export interface TaskStatusRecord {
-    correlationId: string; // Correlation ID for tracing. All task instances with the same correlation ID are related to the same original root task. 
-    taskId: TaskId; // The type of task being executed
-    taskInstanceId: string; // The task execution ID assigned by the Agent
-    agentName?: string; // The name of the Agent executing the task
-    startedAt: Date; // Timestamp when the task execution started
-    status: Status; // Current status of the task execution
-    stopReason?: StopReason; // The reason why the task execution stopped
-    executionTimeMs?: number; // Execution time, in milliseconds
-    parentTaskId?: string; // If this is a subtask, the parent task ID
-    parentTaskInstanceId?: string; // If this is a subtask, the parent task instance ID
-    resumedAfterSubtasksGroupId?: string; // If this is a task that is resumed after a subtasks group finished, track the group ID here
-    subtaskGroupId?: string; // If this is a subtask, the group ID of the subtask batch
-    taskOutput?: any; // The output produced by the task execution
-    taskInput: any; // The input data provided to the task execution
+    correlationId: string;                          // Correlation ID for tracing. All task instances with the same correlation ID are related to the same original root task. 
+    taskId: TaskId;                                 // The type of task being executed
+    taskInstanceId: string;                         // The task execution ID assigned by the Agent
+    agentName?: string;                             // The name of the Agent executing the task
+    startedAt: Date;                                // Timestamp when the task execution started
+    stoppedAt: Date;                                // Timestamp when the task execution stopped
+    status: Status;                                 // Current status of the task execution
+    
+    parentTaskId?: string;                          // If this is a subtask, the parent task ID
+    parentTaskInstanceId?: string;                  // If this is a subtask, the parent task instance ID
+    
+    resumedAfterSubtasksGroupId?: string;           // If this is a task that is resumed after a subtasks group finished, track the group ID here
+    
+    groupId?: string;                               // If this is a subtask, the group ID of the subtask batch
+
+    taskInput: any;                                 // The input data provided to the task execution
+    taskOutput?: any;                               // The output produced by the task execution
 }
 
-export type Status = "published" | "started" | "waiting" | "completed" | "failed" | "childrenTriggered" | "resumed"; 
+export type Status = "published" | "started" | "completed" | "failed"; 

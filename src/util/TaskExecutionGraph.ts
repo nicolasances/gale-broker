@@ -1,5 +1,5 @@
 import { ValidationError } from "toto-api-controller";
-import { TaskStatusRecord } from "../core/tracking/TaskTracker";
+import { TaskStatusRecord } from "../core/tracking/AgentStatusTracker";
 
 /**
  * This class provides methods to build an in-memory representation of a task execution graph
