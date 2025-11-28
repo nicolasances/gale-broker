@@ -74,13 +74,14 @@ export class TaskExecution {
                     return agentTaskResponse;
                 }
                 else if (agentTaskResponse.stopReason === "failed") {
-                    await tracker.rootAgentFailed(agent, task, agentTaskResponse);
+                    await tracker.agentFailed(agent, task, agentTaskResponse);
                     return agentTaskResponse;
                 }
                 else if (agentTaskResponse.stopReason === "subtasks") {
                     await tracker.agentSpawnedSubtasks(agent, task, agentTaskResponse);
 
                     // Spawn subtasks by publishing them to the Message Bus
+                    // TODO
 
                 }
                 else throw new TotoRuntimeError(500, `Unknown stop reason received from agent ${agent.name} for task ${task.taskId}: ${agentTaskResponse.stopReason}`);
@@ -96,44 +97,69 @@ export class TaskExecution {
 
                 // Handle the response 
                 if (agentTaskResponse.stopReason === 'failed') {
-                    await tracker.subtaskFailed(agent, task, agentTaskResponse);
+                    await tracker.agentFailed(agent, task, agentTaskResponse);
 
                     // TODO: resume the parent task with failure info - or retry automatically once before resuming the parent
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
+                    await tracker.agentCompleted(agent, task, agentTaskResponse);
 
                     // TODO: Check if all subtasks in the group are done and if so, RESUME the parent task
+                    const groupDone = await tracker.isGroupDone(task.taskGroupId!); 
 
-                    // If not all are done, just return
+                    if (groupDone) await resumeParentTask(task, agentTaskResponse);
+
+                    return agentTaskResponse;
                 }
                 else if (agentTaskResponse.stopReason === 'subtasks') {
+                    await tracker.agentSpawnedSubtasks(agent, task, agentTaskResponse);
 
-                    // Spawn subtasks
+                    // Create branches for each task group (or a single branch if there's only one group)
+                    
+                    // TODO: Spawn subtasks. Each subtask has a branchId on top of a groupId
                 }
 
             }
             else if (isParentTaskResumption(task)) {
-                // I'm resuming a parent task 
+                // The Parent Task is being resumed after a group of subtasks or a standalone agent not part of a group was completed
+                
+                const completedGroupId = task.command.completedTaskGroupId;
+                const branchId = task.command.branchId; // Branch on which the completed task group (or lone agent) is located
 
-                // Trigger the parent agent with a resume command
+                if (!completedGroupId) throw new ValidationError(400, "Missing completedTaskGroupId in command to resume parent task. Task Id: " + task.taskId);
+                if (!branchId) throw new ValidationError(400, "Missing branchId in command to resume parent task. Task Id: " + task.taskId);
+
+                // Resume the parent <=> ask if there is more to do on the branch or not
                 const agentTaskResponse: AgentTaskResponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(task, task.correlationId!);
 
                 if (agentTaskResponse.stopReason === 'failed') {
-                    // TODO
+                    await tracker.agentFailed(agent, task, agentTaskResponse);
+
+                    // TODO If this parent task had a parent itself, notify the parent  - or retry automatically once before resuming the parent
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
-                    // If the parent is DONE (no more subtasks), check if it was part of a group 
-                    // - If not, IT WAS THE ROOT TASK => the whole flow is done 
-                    // NOT CORRECT!!!!! if the left group finished but not the right one and the left one has no more things after but the right one does, I won't be able to handle that
+                    // The parent agent is saying it's done with this branch
 
-                    // - If yes, check if all other tasks in the group are done. 
-                    //     - If not return. 
+                    // Mark the branch as completed
+                    await tracker.markBranchCompleted(branchId);
+                    
+                    // Check if the branches siblings to this one are also already completed
+                    const branchesCompleted = await tracker.areSiblingBranchesCompleted(branchId);
 
-                    //     - If yes, RESUME the UPPER PARENT TASK
+                    if (branchesCompleted) {
+                        // TODO: gather the outputs of all branches and return the final output
+                        return ; // TODO: replace return
+                    }
+
+                    // Not all branches are completed yet: wait for the others
+                    return agentTaskResponse;
                 }
                 else if (agentTaskResponse.stopReason === 'subtasks') {
-                    // There's more to do 
-                    // Spawn subtasks
+                    // This means that the parent agent has more work to do on this branch
+                    
+                    await tracker.agentSpawnedSubtasks(agent, task, agentTaskResponse);
+                    
+                    // TODO: Spawn subtasks
                 }
 
             }
