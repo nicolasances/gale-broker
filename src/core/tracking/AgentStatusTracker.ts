@@ -1,18 +1,213 @@
 import { Db } from "mongodb";
-import { ExecutionContext } from "toto-api-controller";
-import { AgentTaskRequest, ParentTaskInfo, TaskInfo, TaskId } from "../../model/AgentTask";
+import { ExecutionContext, TotoRuntimeError } from "toto-api-controller";
+import { AgentTaskRequest, ParentTaskInfo, TaskInfo, TaskId, AgentTaskResponse } from "../../model/AgentTask";
 import { GaleConfig } from "../../Config";
 import { StopReason } from "../../model/AgentTask";
 import { AgentDefinition } from "../../model/AgentDefinition";
 import { v4 as uuidv4 } from 'uuid';
 
+const MAX_LOCK_ATTEMPTS = 10;
+
 export class AgentStatusTracker {
 
     config: GaleConfig;
+    tasksCollection: any;
+    branchesCollection: any;
 
     constructor(private db: Db, private execContext: ExecutionContext) {
         this.config = execContext.config as GaleConfig;
+        this.tasksCollection = this.db.collection(this.config.getCollections().tasks);
+        this.branchesCollection = this.db.collection(this.config.getCollections().branches);
     }
+
+    /**
+     * Locks the specific task for update
+     * @param taskInstanceId
+     */
+    async acquireTaskLock(taskInstanceId: string, attempt: number = 1): Promise<void> {
+
+        if (attempt > MAX_LOCK_ATTEMPTS) {
+            throw new TotoRuntimeError(500, `Failed to lock task ${taskInstanceId} after ${MAX_LOCK_ATTEMPTS} attempts`);
+        }
+
+        const updateResult = await this.tasksCollection.updateOne({ taskInstanceId: taskInstanceId, locked: { $ne: true } }, { $set: { locked: true } });
+
+        if (updateResult.matchedCount === 0) {
+            // Means it's already locked: wait and retry
+            await new Promise(resolve => setTimeout(resolve, 50));
+            return this.acquireTaskLock(taskInstanceId, attempt + 1);
+        }
+    }
+
+    /**
+     * Releases the lock on the flow after update.
+     * @param correlationId 
+     */
+    async releaseTaskLock(taskInstanceId: string): Promise<void> {
+        await this.tasksCollection.updateOne({ taskInstanceId: taskInstanceId }, { $set: { locked: false } });
+    }
+
+
+    /**
+     * Tracks the fact that an agent has started executing a task.
+     * 
+     * @param task 
+     * @param agentDefinition 
+     */
+    async agentStatusStarted(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<void> {
+
+        const record: TaskStatusRecord = {
+            correlationId: task.correlationId!,
+            agentName: agentDefinition.name,
+            taskId: task.taskId,
+            taskInstanceId: task.taskInstanceId!,
+            startedAt: new Date(Date.now()),
+            status: "started",
+            taskInput: task.taskInputData,
+            groupId: task.taskGroupId,
+            parentTaskId: task.parentTask?.taskId,
+            parentTaskInstanceId: task.parentTask?.taskInstanceId,
+            branchId: task.branchId,
+        }
+
+        await this.tasksCollection.updateOne({ taskInstanceId: task.taskInstanceId }, { $set: record }, { upsert: true });
+    }
+
+    /**
+     * Tracks the fact that an agent has completed executing a task.
+     * 
+     * @param taskInstanceId 
+     * @param agentTaskResponse 
+     */
+    async agentStatusCompleted(taskInstanceId: string, agentTaskResponse: AgentTaskResponse): Promise<void> {
+
+        await this.tasksCollection.updateOne({ taskInstanceId }, {
+            $set: {
+                status: "completed",
+                stoppedAt: new Date(Date.now()),
+                taskOutput: agentTaskResponse.taskOutput
+            }
+        });
+
+    }
+
+    /**
+     * Tracks the fact that an agent has failed executing a task.
+     * 
+     * @param taskInstanceId 
+     * @param agentTaskResponse 
+     */
+    async agentStatusFailed(taskInstanceId: string, agentTaskResponse: AgentTaskResponse): Promise<void> {
+
+        await this.tasksCollection.updateOne({ taskInstanceId }, {
+            $set: {
+                status: "failed",
+                stoppedAt: new Date(Date.now()),
+                taskOutput: agentTaskResponse.taskOutput
+            }
+        });
+
+    }
+
+    /**
+     * Tracks the publication of a set of agent tasks.
+     * 
+     * @param tasks the list of tasks being published
+     */
+    async agentTasksPublished(tasks: AgentTaskRequest[]): Promise<void> {
+
+        const records: TaskStatusRecord[] = tasks.map(task => ({
+            correlationId: task.correlationId!,
+            taskId: task.taskId,
+            taskInstanceId: task.taskInstanceId!,
+            startedAt: new Date(Date.now()),
+            status: "published",
+            taskInput: task.taskInputData,
+            groupId: task.taskGroupId,
+            parentTaskId: task.parentTask?.taskId,
+            parentTaskInstanceId: task.parentTask?.taskInstanceId,
+            branchId: task.branchId,
+        }));
+
+        await this.tasksCollection.insertMany(records);
+
+    }
+
+
+    /**
+     * Finds all tasks that belong to a specific subtask group.
+     * 
+     * @param groupId the group id of the subtasks
+     * @returns 
+     */
+    async findGroupTasks(groupId: string): Promise<TaskStatusRecord[]> {
+
+        const children = await this.db.collection(this.config.getCollections().tasks).find({ groupId: groupId }).toArray();
+
+        return children.map(doc => doc as any as TaskStatusRecord);
+    }
+
+    /**
+     * Marks a parent task as resumed after its subtasks have completed.
+     * 
+     * @param parentTaskInstanceId the instance ID of the parent task
+     * @param completedSubtaskGroupId the ID of the completed subtask group
+     */
+    async markTaskResumedAfterGroupCompletion(parentTaskInstanceId: string, completedSubtaskGroupId: string): Promise<void> {
+
+        await this.tasksCollection.updateOne(
+            { taskInstanceId: parentTaskInstanceId },
+            { $addToSet: { completedSubtaskGroups: completedSubtaskGroupId } }
+        );
+
+    }
+
+    /**
+     * Creates the branches records in the tracking system.
+     * @param branches the branches to create
+     */
+    async createBranches(parentTaskInstanceId: string, branches: { branchId: string, tasks: AgentTaskRequest[] }[]): Promise<void> {
+        await this.branchesCollection.insertMany(branches.map(branch => ({ branchId: branch.branchId, parentTaskInstanceId: parentTaskInstanceId, createdAt: new Date(Date.now()), status: 'active' })));
+    }
+
+    /**
+     * Marks a branch as completed.
+     * 
+     * @param branchId the branchId to mark as completed
+     */
+    async markBranchCompleted(branchId: string): Promise<void> {
+        await this.branchesCollection.updateOne(
+            { branchId },
+            { $set: { status: 'completed', completedAt: new Date(Date.now()) } }
+        );
+    }
+
+    /**
+     * Checks if the specified branches are all completed.
+     * 
+     * @param branchIds the branches
+     * @returns 
+     */
+    async areBranchesCompleted(branchIds: string[]): Promise<boolean> {
+
+        const branches = await this.branchesCollection.find({ branchId: { $in: branchIds } }).toArray() as any[];
+
+        if (branches.length === 0) return true;
+
+        return branches.every(branch => branch.status === 'completed');
+    }
+
+
+
+
+
+
+
+
+
+
+
+
 
     /**
      * Tracks the status of a task.
@@ -189,20 +384,6 @@ export class AgentStatusTracker {
     }
 
     /**
-     * Finds all child tasks of a given parent task that belong to a specific subtask group.
-     * 
-     * @param parentTaskInstanceId the instance Id of the parent task
-     * @param subtaskGroupId the group id of the subtasks
-     * @returns 
-     */
-    async findChildrenWithSubtaskGroupId(parentTaskInstanceId: string, subtaskGroupId: string): Promise<TaskStatusRecord[]> {
-
-        const children = await this.db.collection(this.config.getCollections().tasks).find({ parentTaskInstanceId, subtaskGroupId }).toArray();
-
-        return children.map(doc => doc as any as TaskStatusRecord);
-    }
-
-    /**
      * Flags the speified parent task (by its task instance Id) as 'childrenCompleted'. 
      * 
      * IMPORTANT: this method helps avoiding RACE CONDITIONS by using an upsert and returning the count of modified documents.
@@ -279,15 +460,16 @@ export interface TaskStatusRecord {
     taskInstanceId: string;                         // The task execution ID assigned by the Agent
     agentName?: string;                             // The name of the Agent executing the task
     startedAt: Date;                                // Timestamp when the task execution started
-    stoppedAt: Date;                                // Timestamp when the task execution stopped
+    stoppedAt?: Date;                               // Timestamp when the task execution stopped
     status: Status;                                 // Current status of the task execution
-    
+
     parentTaskId?: string;                          // If this is a subtask, the parent task ID
     parentTaskInstanceId?: string;                  // If this is a subtask, the parent task instance ID
-    
-    resumedAfterSubtasksGroupId?: string;           // If this is a task that is resumed after a subtasks group finished, track the group ID here
-    
+
+    completedSubtaskGroups?: string[];              // List of completed subtasks groups IDs
+
     groupId?: string;                               // If this is a subtask, the group ID of the subtask batch
+    branchId?: string;                              // The branch on which the task is located
 
     taskInput: any;                                 // The input data provided to the task execution
     taskOutput?: any;                               // The output produced by the task execution
