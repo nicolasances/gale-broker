@@ -3,6 +3,16 @@ import { AgentDefinition } from "../model/AgentDefinition";
 import { ExecutionContext } from "toto-api-controller";
 import { AgentTaskRequest, AgentTaskResponse } from "../model/AgentTask";
 
+export interface AgentCallFactory {
+    createAgentCall(agentDefinition: AgentDefinition, execContext: ExecutionContext, bearerToken?: string): AgentCall;
+}
+
+export class DefaultAgentCallFactory implements AgentCallFactory {
+    createAgentCall(agentDefinition: AgentDefinition, execContext: ExecutionContext, bearerToken?: string): AgentCall {
+        return new AgentCall(agentDefinition, execContext, bearerToken);
+    }
+}
+
 export class AgentCall {
 
     execContext: ExecutionContext;

@@ -1,12 +1,12 @@
 import { AgentsCatalog } from "../catalog/AgentsCatalog";
 import { AgentNotFoundError } from "../../model/error/AgentNotFoundError";
-import { AgentCall } from "../../api/AgentCall";
+import { AgentCallFactory } from "../../api/AgentCall";
 import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { AgentTaskRequest, AgentTaskResponse, TaskInfo, ParentTaskInfo, TaskGroup } from "../../model/AgentTask";
+import { AgentTaskRequest, AgentTaskResponse, ParentTaskInfo, TaskGroup } from "../../model/AgentTask";
 import { v4 as uuidv4 } from "uuid";
 import { isRootTaskFirstStart, isParentTaskResumption, isSubtaskStart } from "./TaskExecutionUtil";
-import { AgentStatusTracker, TaskStatusRecord } from "../tracking/AgentStatusTracker";
+import { AgentStatusTracker } from "../tracking/AgentStatusTracker";
 import { AgenticFlowTracker } from "../tracking/AgenticFlowTracker";
 
 /**
@@ -21,14 +21,19 @@ import { AgenticFlowTracker } from "../tracking/AgenticFlowTracker";
  */
 export class TaskExecution {
 
-    bearerToken: string;
     execContext: ExecutionContext;
     config: GaleConfig;
     cid: string;
+    agentCallFactory: AgentCallFactory;
+    agenticFlowTracker: AgenticFlowTracker;
+    agentsCatalog: AgentsCatalog;
 
-    constructor(execContext: ExecutionContext, bearerToken: string) {
+    constructor({ execContext, agentCallFactory, agenticFlowTracker, agentsCatalog }: { execContext: ExecutionContext, agentCallFactory: AgentCallFactory, agenticFlowTracker: AgenticFlowTracker, agentsCatalog: AgentsCatalog }) {
         this.execContext = execContext;
-        this.bearerToken = bearerToken;
+        this.agentCallFactory = agentCallFactory;
+        this.agenticFlowTracker = agenticFlowTracker;
+        this.agentsCatalog = agentsCatalog;
+        
         this.config = execContext.config as GaleConfig;
         this.cid = execContext.cid ?? "";
     }
@@ -38,19 +43,14 @@ export class TaskExecution {
      */
     async do(task: AgentTaskRequest): Promise<AgentTaskResponse> {
 
-        const config = this.execContext.config as GaleConfig;
         const cid = this.cid;
         const logger = this.execContext.logger;
 
         try {
-
-            const client = await config.getMongoClient();
-            const db = client.db(config.getDBName());
-
-            const tracker = new AgenticFlowTracker(db, this.execContext, new AgentStatusTracker(db, this.execContext));
+            const tracker = this.agenticFlowTracker;
 
             // 0. Find an available Agent that can execute the task.
-            const agent = await new AgentsCatalog(db, this.execContext).findAgentByTaskId(task.taskId);
+            const agent = await this.agentsCatalog.findAgentByTaskId(task.taskId);
 
             if (!agent) throw new AgentNotFoundError(task.taskId);
 
@@ -66,7 +66,7 @@ export class TaskExecution {
                 await tracker.rootAgentStarted(agent, task);
 
                 // Trigger the agent (orchestrator, most likely)
-                const agentTaskResponse: AgentTaskResponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(task, task.correlationId);
+                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent, this.execContext).execute(task, task.correlationId);
 
                 // Response handling
                 // If you're done, just return: it wasn't an orchestrator flow after all
@@ -98,7 +98,7 @@ export class TaskExecution {
 
                 await tracker.agentStarted(agent, task);
 
-                const agentTaskResponse: AgentTaskResponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(task, task.correlationId!);
+                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent, this.execContext).execute(task, task.correlationId!);
 
                 // Handle the response 
                 if (agentTaskResponse.stopReason === 'failed') {
@@ -137,7 +137,7 @@ export class TaskExecution {
                 if (!branchId) throw new ValidationError(400, "Missing branchId in command to resume parent task. Task Id: " + task.taskId);
 
                 // Resume the parent <=> ask if there is more to do on the branch or not
-                const agentTaskResponse: AgentTaskResponse = await new AgentCall(agent, this.execContext, this.bearerToken).execute(task, task.correlationId!);
+                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent, this.execContext).execute(task, task.correlationId!);
 
                 if (agentTaskResponse.stopReason === 'failed') {
                     await tracker.agentFailed(task, agentTaskResponse);
