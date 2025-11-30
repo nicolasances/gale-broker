@@ -33,7 +33,7 @@ export class TaskExecution {
         this.agentCallFactory = agentCallFactory;
         this.agenticFlowTracker = agenticFlowTracker;
         this.agentsCatalog = agentsCatalog;
-        
+
         this.config = execContext.config as GaleConfig;
         this.cid = execContext.cid ?? "";
     }
@@ -282,7 +282,7 @@ export class TaskExecution {
         for (const group of subtaskGroups) {
 
             // Create a branch id 
-            const branchId = uuidv4();
+            const branchId = "branch-" + group.groupId;
 
             // Create the subtasks in the group
             const groupTasks = group.tasks.map((task) => {

@@ -51,6 +51,10 @@ export class AgenticFlowTracker {
         await this.flowsCollection.updateOne({ correlationId: correlationId }, { $set: { locked: false } });
     }
 
+    async getFlow(correlationId: string): Promise<AgenticFlow | null> {
+        return this.flowsCollection.findOne({ correlationId }) as Promise<AgenticFlow | null>;
+    }
+
     /**
      * Tracks the fact that the root agent has started executing.
      * 

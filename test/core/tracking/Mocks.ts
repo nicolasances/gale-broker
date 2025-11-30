@@ -1,13 +1,18 @@
 import { TaskStatusRecord } from "../../../src/core/tracking/AgentStatusTracker";
 import { AgentTaskRequest, AgentTaskResponse } from "../../../src/model/AgentTask";
 import { AgentDefinition } from "../../../src/model/AgentDefinition";
+import { AgentCallFactory } from "../../../src/api/AgentCall";
+import { TaskId } from "../../../src/model/AgentTask";
 
 export class MockConfig {
+    messageBus: MockMessageBus = new MockMessageBus();
+    
     getCollections() {
         return {
             tasks: "tasks",
             branches: "branches",
-            flows: "flows"
+            flows: "flows",
+            agents: "agents"
         }
     }
 }
@@ -15,6 +20,12 @@ export class MockConfig {
 export class MockExecContext {
     config = new MockConfig();
     correlationId = "test-correlation-id";
+    cid = "test-cid";
+    logger = {
+        compute: (cid: string, message: string, level?: string) => {
+            // Mock logger - no-op
+        }
+    };
 }
 
 export class MockCollection {
@@ -202,4 +213,114 @@ export class MockAgentStatusTracker {
         this.branches.clear();
     }
 
+    // Additional methods needed for TaskExecution tests
+    async acquireTaskLock(taskInstanceId: string): Promise<void> {
+        // Mock implementation - no actual locking needed in tests
+    }
+
+    async releaseTaskLock(taskInstanceId: string): Promise<void> {
+        // Mock implementation - no actual locking needed in tests
+    }
+
+    async findTaskByInstanceId(taskInstanceId: string): Promise<TaskStatusRecord | null> {
+        return this.tasks.get(taskInstanceId) || null;
+    }
+
+    async markTaskResumedAfterGroupCompletion(taskInstanceId: string, groupId: string): Promise<void> {
+        const record = this.tasks.get(taskInstanceId);
+        if (record) {
+            if (!record.completedSubtaskGroups) {
+                record.completedSubtaskGroups = [];
+            }
+            record.completedSubtaskGroups.push(groupId);
+            this.tasks.set(taskInstanceId, record);
+        }
+    }
+
 }
+
+/**
+ * Mock Message Bus for testing
+ * Stores published tasks in memory for verification
+ */
+export class MockMessageBus {
+    publishedTasks: AgentTaskRequest[] = [];
+
+    async publishTask(task: AgentTaskRequest, cid: string): Promise<void> {
+        this.publishedTasks.push(task);
+    }
+
+    clear(): void {
+        this.publishedTasks = [];
+    }
+}
+
+/**
+ * Mock Agent Call that returns predefined responses
+ */
+export class MockAgentCall {
+    execContext: any;
+    agentDefinition: AgentDefinition;
+    
+    constructor(agentDefinition: AgentDefinition, private response: AgentTaskResponse) {
+        this.agentDefinition = agentDefinition;
+    }
+
+    async execute(task: AgentTaskRequest, correlationId: string): Promise<AgentTaskResponse> {
+        return this.response;
+    }
+}
+
+/**
+ * Mock Agent Call Factory
+ * Allows configuring agent responses per agent name
+ */
+export class MockAgentCallFactory implements AgentCallFactory {
+    private responses: Map<string, AgentTaskResponse> = new Map();
+
+    /**
+     * Configure the response for a specific agent
+     */
+    setAgentResponse(agentName: string, response: AgentTaskResponse): void {
+        this.responses.set(agentName, response);
+    }
+
+    createAgentCall(agentDefinition: AgentDefinition): MockAgentCall {
+        const response = this.responses.get(agentDefinition.name);
+        if (!response) {
+            throw new Error(`No response configured for agent ${agentDefinition.name}`);
+        }
+        return new MockAgentCall(agentDefinition, response);
+    }
+
+    clear(): void {
+        this.responses.clear();
+    }
+}
+
+/**
+ * Mock Agents Catalog with in-memory storage
+ */
+export class MockAgentsCatalog {
+    private agents: Map<TaskId, AgentDefinition> = new Map();
+
+    /**
+     * Register an agent in the catalog
+     */
+    registerAgent(agent: AgentDefinition): void {
+        this.agents.set(agent.taskId, agent);
+    }
+
+    async findAgentByTaskId(taskId: TaskId): Promise<AgentDefinition | null> {
+        return this.agents.get(taskId) || null;
+    }
+
+    async getAgents(): Promise<AgentDefinition[]> {
+        return Array.from(this.agents.values());
+    }
+
+    clear(): void {
+        this.agents.clear();
+    }
+}
+
