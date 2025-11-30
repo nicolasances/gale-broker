@@ -83,7 +83,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, tracker);
+                    }, null, tracker);
 
                     return agentTaskResponse;
                 }
@@ -121,7 +121,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, tracker);
+                    }, task.taskGroupId, tracker);
 
                     return agentTaskResponse;
                 }
@@ -157,7 +157,7 @@ export class TaskExecution {
                         await tracker.agentCompleted(task, agentTaskResponse);
 
                         // TODO: gather the outputs of all branches and return the final output instead of the current one
-                        return agentTaskResponse; 
+                        return agentTaskResponse;
                     }
 
                     // Not all branches are completed yet: wait for the others
@@ -170,7 +170,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, tracker);
+                    }, task.command.completedTaskGroupId!, tracker);
 
                     return agentTaskResponse;
                 }
@@ -232,7 +232,7 @@ export class TaskExecution {
             const agentTaskRequest = new AgentTaskRequest({
                 command: {
                     command: "resume",
-                    completedTaskGroupId: taskGroupId, 
+                    completedTaskGroupId: taskGroupId,
                     branchId: groupTasks[0].branchId,
                 },
                 correlationId: correlationId,
@@ -240,7 +240,7 @@ export class TaskExecution {
                 taskInstanceId: parentTask.taskInstanceId,
                 taskInputData: {
                     originalInput: parentTask?.taskInput.originalInput || parentTask?.taskInput,
-                    childrenOutputs: groupTasks.map(child => child.taskOutput), 
+                    childrenOutputs: groupTasks.map(child => child.taskOutput),
                 },
             });
 
@@ -249,7 +249,7 @@ export class TaskExecution {
             await bus.publishTask(agentTaskRequest, this.cid);
 
             // Mark the parent task as resumed in the tracker
-            await statusTracker.markTaskResumedAfterGroupCompletion(parentTaskInstanceId, taskGroupId);    
+            await statusTracker.markTaskResumedAfterGroupCompletion(parentTaskInstanceId, taskGroupId);
 
         } catch (error) {
             throw error;
@@ -267,8 +267,11 @@ export class TaskExecution {
      * This concretely uses the Message Bus to publish the subtask requests.
      * 
      * @param subtasks subtasks to be spawn off
+     * @param parentTask info about the parent task
+     * @param afterGroup the group (identified by the groupId) after which these subtasks are spawned
+     * @param tracker the Agentic Flow tracker to use for tracking
      */
-    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, tracker: AgenticFlowTracker): Promise<void> {
+    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, afterGroup: string | null, tracker: AgenticFlowTracker): Promise<void> {
 
         const bus = this.config.messageBus;
 
@@ -325,7 +328,7 @@ export class TaskExecution {
         await Promise.all(publishPromises);
 
         // Track
-        await tracker.branch(branches);
+        await tracker.branch(branches, afterGroup);
     }
 
 }

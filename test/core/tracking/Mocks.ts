@@ -1,6 +1,4 @@
-import { Db } from "mongodb";
-import { ExecutionContext } from "toto-api-controller";
-import { AgentStatusTracker, TaskStatusRecord } from "../../../src/core/tracking/AgentStatusTracker";
+import { TaskStatusRecord } from "../../../src/core/tracking/AgentStatusTracker";
 import { AgentTaskRequest, AgentTaskResponse } from "../../../src/model/AgentTask";
 import { AgentDefinition } from "../../../src/model/AgentDefinition";
 
@@ -80,47 +78,128 @@ export class MockDb {
 
 export class MockAgentStatusTracker {
     
-    // Track calls for verification
-    startedCalls: any[] = [];
-    completedCalls: any[] = [];
-    failedCalls: any[] = [];
-    publishedCalls: any[] = [];
-    createBranchesCalls: any[] = [];
-    markBranchCompletedCalls: any[] = [];
-    
-    // Mock return values
-    groupTasks: TaskStatusRecord[] = [];
-    branchesCompleted: boolean = true;
+    // In-memory database of task status records
+    private tasks: Map<string, TaskStatusRecord> = new Map();
+    private branches: Map<string, { branchId: string, parentTaskInstanceId: string, status: 'active' | 'completed', createdAt: Date, completedAt?: Date }> = new Map();
 
     async agentStatusStarted(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<void> {
-        this.startedCalls.push({ task, agentDefinition });
+        const record: TaskStatusRecord = {
+            correlationId: task.correlationId!,
+            agentName: agentDefinition.name,
+            taskId: task.taskId,
+            taskInstanceId: task.taskInstanceId!,
+            startedAt: new Date(Date.now()),
+            status: "started",
+            taskInput: task.taskInputData,
+            groupId: task.taskGroupId,
+            parentTaskId: task.parentTask?.taskId,
+            parentTaskInstanceId: task.parentTask?.taskInstanceId,
+            branchId: task.branchId,
+        };
+
+        this.tasks.set(task.taskInstanceId!, record);
     }
 
     async agentStatusCompleted(taskInstanceId: string, agentTaskResponse: AgentTaskResponse): Promise<void> {
-        this.completedCalls.push({ taskInstanceId, agentTaskResponse });
+        const record = this.tasks.get(taskInstanceId);
+        if (record) {
+            record.status = "completed";
+            record.stoppedAt = new Date(Date.now());
+            record.taskOutput = agentTaskResponse.taskOutput;
+            this.tasks.set(taskInstanceId, record);
+        }
     }
 
     async agentStatusFailed(taskInstanceId: string, agentTaskResponse: AgentTaskResponse): Promise<void> {
-        this.failedCalls.push({ taskInstanceId, agentTaskResponse });
+        const record = this.tasks.get(taskInstanceId);
+        if (record) {
+            record.status = "failed";
+            record.stoppedAt = new Date(Date.now());
+            record.taskOutput = agentTaskResponse.taskOutput;
+            this.tasks.set(taskInstanceId, record);
+        }
     }
 
     async agentTasksPublished(tasks: AgentTaskRequest[]): Promise<void> {
-        this.publishedCalls.push(tasks);
+        for (const task of tasks) {
+            const record: TaskStatusRecord = {
+                correlationId: task.correlationId!,
+                taskId: task.taskId,
+                taskInstanceId: task.taskInstanceId!,
+                startedAt: new Date(Date.now()),
+                status: "published",
+                taskInput: task.taskInputData,
+                groupId: task.taskGroupId,
+                parentTaskId: task.parentTask?.taskId,
+                parentTaskInstanceId: task.parentTask?.taskInstanceId,
+                branchId: task.branchId,
+            };
+
+            this.tasks.set(task.taskInstanceId!, record);
+        }
     }
 
     async createBranches(parentTaskInstanceId: string, branches: { branchId: string, tasks: AgentTaskRequest[] }[]): Promise<void> {
-        this.createBranchesCalls.push({ parentTaskInstanceId, branches });
+        for (const branch of branches) {
+            this.branches.set(branch.branchId, {
+                branchId: branch.branchId,
+                parentTaskInstanceId: parentTaskInstanceId,
+                createdAt: new Date(Date.now()),
+                status: 'active'
+            });
+        }
     }
 
     async findGroupTasks(groupId: string): Promise<TaskStatusRecord[]> {
-        return this.groupTasks;
+        const results: TaskStatusRecord[] = [];
+        for (const record of this.tasks.values()) {
+            if (record.groupId === groupId) {
+                results.push(record);
+            }
+        }
+        return results;
     }
 
     async markBranchCompleted(branchId: string): Promise<void> {
-        this.markBranchCompletedCalls.push(branchId);
+        const branch = this.branches.get(branchId);
+        if (branch) {
+            branch.status = 'completed';
+            branch.completedAt = new Date(Date.now());
+            this.branches.set(branchId, branch);
+        }
     }
 
     async areBranchesCompleted(branchIds: string[]): Promise<boolean> {
-        return this.branchesCompleted;
+        for (const branchId of branchIds) {
+            const branch = this.branches.get(branchId);
+            if (!branch || branch.status !== 'completed') {
+                return false;
+            }
+        }
+        return true;
     }
+
+    // Helper method to manually set task status for testing
+    setTaskStatus(taskInstanceId: string, status: "published" | "started" | "completed" | "failed"): void {
+        const record = this.tasks.get(taskInstanceId);
+        if (record) {
+            record.status = status;
+            if (status === "completed" || status === "failed") {
+                record.stoppedAt = new Date(Date.now());
+            }
+            this.tasks.set(taskInstanceId, record);
+        }
+    }
+
+    // Helper method to get all tasks for debugging
+    getAllTasks(): TaskStatusRecord[] {
+        return Array.from(this.tasks.values());
+    }
+
+    // Helper method to clear all data
+    clear(): void {
+        this.tasks.clear();
+        this.branches.clear();
+    }
+
 }

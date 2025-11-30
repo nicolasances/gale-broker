@@ -21,7 +21,7 @@ export class AgenticFlow {
     static fromBSON(bson: any): AgenticFlow {
 
         const cid = bson.correlationId;
-        const root = AgenticFlow.parseNodeFromBSON(bson.root, null);
+        const root = AgenticFlow.parseNodeFromBSON(bson.root);
 
         return new AgenticFlow(cid, root);
     }
@@ -29,49 +29,48 @@ export class AgenticFlow {
     /**
      * Parses a node from its BSON representation.
      * 
-     * IMPORTANT: reconstructs the prev links as well.
-     * 
      * @param bson 
      * @returns 
      */
-    static parseNodeFromBSON(bson: any, prev: AbstractNode | null): AbstractNode {
+    static parseNodeFromBSON(bson: any): AbstractNode {
 
         if (bson.type === "agent") {
-            
+
             const node = new AgentNode({
                 taskId: bson.taskId,
                 taskInstanceId: bson.taskInstanceId,
                 name: bson.name || undefined,
             });
 
-            node.setNext(bson.next ? AgenticFlow.parseNodeFromBSON(bson.next, node) : null);
+            node.setNext(bson.next ? AgenticFlow.parseNodeFromBSON(bson.next) : null);
 
             return node;
 
         } else if (bson.type === "group") {
-            
-            const node =  new GroupNode({
-                agents: bson.agents.map((agentBson: any) => AgenticFlow.parseNodeFromBSON(agentBson, null) as AgentNode),
+
+            const node = new GroupNode({
+                agents: bson.agents.map((agentBson: any) => AgenticFlow.parseNodeFromBSON(agentBson) as AgentNode),
+                groupId: bson.groupId,
                 name: bson.name || undefined,
             });
 
             node.agents.forEach(agent => agent.setPrev(node));
-            node.setNext(bson.next ? AgenticFlow.parseNodeFromBSON(bson.next, node) : null);
-            
+            node.setNext(bson.next ? AgenticFlow.parseNodeFromBSON(bson.next) : null);
+
             return node;
 
         } else if (bson.type === "branch") {
-            
+
             const node = new BranchNode({
                 branches: bson.branches.map((branchBson: any) => ({
                     branchId: branchBson.branchId,
-                    branch: AgenticFlow.parseNodeFromBSON(branchBson.branch, null)
+                    branch: AgenticFlow.parseNodeFromBSON(branchBson.branch)
                 })),
                 name: bson.name || undefined,
             });
 
             node.branches.forEach(branch => branch.branch.setPrev(node));
-            node.setNext(bson.next ? AgenticFlow.parseNodeFromBSON(bson.next, node) : null);
+            node.setNext(bson.next ? AgenticFlow.parseNodeFromBSON(bson.next) : null);
 
             return node;
 
@@ -97,14 +96,13 @@ export class AgenticFlow {
     /**
      * Finds the task node by its taskInstanceId and creates branches as its next node.
      * 
-     * @param taskInstanceId the parent task that has requested the branch creation
+     * @param afterGroup the group (identified by the groupId) after which these branches are created
      * @param branches the different branches
      */
-    branch(taskInstanceId: string, branches: { branchId: string, tasks: AgentTaskRequest[] }[]): void {
+    branch(afterGroup: string | null, branches: { branchId: string, tasks: AgentTaskRequest[] }[]): void {
 
-        const parentNode = this.root.findAgentNode(taskInstanceId) as AgentNode;
-
-        if (!parentNode) throw new TotoRuntimeError(500, `[Agentic Flow]: Could not find parent node with taskInstanceId ${taskInstanceId} to create branches.`);
+        let parentNode = this.root.findGroupNode(afterGroup) as AbstractNode | null;
+        if (parentNode === null) parentNode = this.root as AbstractNode;
 
         parentNode.setNext(new BranchNode({
             branches: branches.map(branch => {
@@ -114,7 +112,8 @@ export class AgenticFlow {
                 return {
                     branchId: branch.branchId, branch: new GroupNode({
                         agents: branch.tasks.map(task => new AgentNode({ taskId: task.taskId, taskInstanceId: task.taskInstanceId! })),
-                        name: branch.tasks[0].taskGroupId
+                        groupId: branch.tasks[0].taskGroupId!,
+                        // name: branch.tasks[0].taskGroupId
                     })
                 };
             }),
@@ -144,7 +143,9 @@ export class AgenticFlow {
         let prev = branchNode.getPrev();
         let parentBranchNode: BranchNode | null = null;
         while (prev) {
-            if (prev.getType() === "branch") parentBranchNode = prev as BranchNode;
+            if (prev.getType() === "branch") {
+                parentBranchNode = prev as BranchNode;
+            }
             prev = prev.getPrev();
         }
 
@@ -178,8 +179,10 @@ export abstract class AbstractNode {
      * @param taskInstanceId the task instance id of the agent to be found
      */
     abstract findAgentNode(taskInstanceId: string): AgentNode | null;
-
+    
     abstract findBranchNode(branchId: string): BranchNode | null;
+
+    abstract findGroupNode(groupId: string | null): GroupNode | null;
 
     /**
      * Serializes the node to BSON for storage in MongoDB.
@@ -187,7 +190,7 @@ export abstract class AbstractNode {
      * IMPORTANT: 
      * Makes sure that the prev of the nodes are not included to avoid circular references.
      */
-    abstract toBSON(): any; 
+    abstract toBSON(): any;
 
     setNext(node: AbstractNode | null): void {
         this.next = node;
@@ -231,6 +234,12 @@ export class AgentNode extends AbstractNode {
         return null;
     }
 
+    findGroupNode(groupId: string | null): GroupNode | null {
+        if (groupId === null) return null;
+        if (this.next) return this.next.findGroupNode(groupId);
+        return null;
+    }
+
     toBSON() {
         return {
             taskId: this.taskId,
@@ -244,12 +253,14 @@ export class AgentNode extends AbstractNode {
 
 export class GroupNode extends AbstractNode {
     agents: AgentNode[];
+    groupId: string;
 
-    constructor({ agents, name, next }: { agents: AgentNode[], name?: string, next?: AbstractNode }) {
+    constructor({ agents, groupId, name, next }: { agents: AgentNode[], groupId: string, name?: string, next?: AbstractNode }) {
         super();
 
         this.type = "group";
         this.agents = agents;
+        this.groupId = groupId;
         if (name) this.name = name;
         if (next) this.next = next;
     }
@@ -268,10 +279,18 @@ export class GroupNode extends AbstractNode {
         return null;
     }
 
+    findGroupNode(groupId: string | null): GroupNode | null {
+        if (groupId === null) return null;
+        if (this.groupId === groupId) return this;
+        if (this.next) return this.next.findGroupNode(groupId);
+        return null;
+    }
+
     toBSON() {
         return {
             agents: this.agents.map(agent => agent.toBSON()),
             type: this.type,
+            groupId: this.groupId,
             name: this.name,
             next: this.next ? this.next.toBSON() : null
         }
@@ -292,6 +311,11 @@ export class BranchNode extends AbstractNode {
         this.branches = branches;
         if (name) this.name = name;
         if (next) this.next = next;
+        
+        // Set up prev links for all branches
+        for (const branch of this.branches) {
+            branch.branch.setPrev(this);
+        }
     }
 
     findAgentNode(taskInstanceId: string): AgentNode | null {
@@ -310,6 +334,16 @@ export class BranchNode extends AbstractNode {
             if (found) return found;
         }
         if (this.next) return this.next.findBranchNode(branchId);
+        return null;
+    }
+
+    findGroupNode(groupId: string | null): GroupNode | null {
+        if (groupId === null) return null;
+        for (const branch of this.branches) {
+            const found = branch.branch.findGroupNode(groupId);
+            if (found) return found;
+        }
+        if (this.next) return this.next.findGroupNode(groupId);
         return null;
     }
 
