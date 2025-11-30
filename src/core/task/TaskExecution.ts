@@ -66,7 +66,7 @@ export class TaskExecution {
                 await tracker.rootAgentStarted(agent, task);
 
                 // Trigger the agent (orchestrator, most likely)
-                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent, this.execContext).execute(task, task.correlationId);
+                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId);
 
                 // Response handling
                 // If you're done, just return: it wasn't an orchestrator flow after all
@@ -98,7 +98,7 @@ export class TaskExecution {
 
                 await tracker.agentStarted(agent, task);
 
-                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent, this.execContext).execute(task, task.correlationId!);
+                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
 
                 // Handle the response 
                 if (agentTaskResponse.stopReason === 'failed') {
@@ -137,7 +137,7 @@ export class TaskExecution {
                 if (!branchId) throw new ValidationError(400, "Missing branchId in command to resume parent task. Task Id: " + task.taskId);
 
                 // Resume the parent <=> ask if there is more to do on the branch or not
-                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent, this.execContext).execute(task, task.correlationId!);
+                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
 
                 if (agentTaskResponse.stopReason === 'failed') {
                     await tracker.agentFailed(task, agentTaskResponse);

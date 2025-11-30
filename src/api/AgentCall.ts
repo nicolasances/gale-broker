@@ -4,12 +4,15 @@ import { ExecutionContext } from "toto-api-controller";
 import { AgentTaskRequest, AgentTaskResponse } from "../model/AgentTask";
 
 export interface AgentCallFactory {
-    createAgentCall(agentDefinition: AgentDefinition, execContext: ExecutionContext, bearerToken?: string): AgentCall;
+    createAgentCall(agentDefinition: AgentDefinition): AgentCall;
 }
 
 export class DefaultAgentCallFactory implements AgentCallFactory {
-    createAgentCall(agentDefinition: AgentDefinition, execContext: ExecutionContext, bearerToken?: string): AgentCall {
-        return new AgentCall(agentDefinition, execContext, bearerToken);
+    
+    constructor(private execContext: ExecutionContext, private bearerToken?: string) { }
+    
+    createAgentCall(agentDefinition: AgentDefinition): AgentCall {
+        return new AgentCall(agentDefinition, this.execContext, this.bearerToken);
     }
 }
 
@@ -46,7 +49,7 @@ export class AgentCall {
                     'Authorization': this.bearerToken ? `Bearer ${this.bearerToken}` : null,
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({...task, correlationId})
+                body: JSON.stringify({ ...task, correlationId })
             }, (err: any, resp: any, body: any) => {
 
 
