@@ -60,7 +60,7 @@ export class TaskExecution {
 
                 // Assign task instance id and correlation id
                 task.taskInstanceId = uuidv4();
-                task.correlationId = uuidv4();
+                task.correlationId = task.correlationId || uuidv4();
 
                 // Log the start of the root task
                 await tracker.rootAgentStarted(agent, task);

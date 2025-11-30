@@ -188,6 +188,7 @@ describe("TaskExecution", () => {
             const rootTaskRequest = new AgentTaskRequest({
                 command: { command: "start" },
                 taskId: "orchestrator-task",
+                correlationId: "test-correlation",
                 taskInputData: { input: "root-data" }
             });
 
@@ -272,17 +273,22 @@ describe("TaskExecution", () => {
             expect(parentTask?.status).to.equal("completed");
 
             // Verify the flow
-            const expectedFlow = new AgenticFlow("test-correlation", new BranchNode({
-                branches: [{
-                    branchId: "branch-group-1", 
-                    branch: new GroupNode({
-                        groupId: "group-1",
-                        agents: [
-                            new AgentNode({taskId: "child-task-1", taskInstanceId: publishedTask1.taskInstanceId!, name: "child-agent-1" }),
-                            new AgentNode({taskId: "child-task-2", taskInstanceId: publishedTask2.taskInstanceId!, name: "child-agent-2" })
-                        ]
-                    })
-                }]
+            const expectedFlow = new AgenticFlow("test-correlation", new AgentNode({
+                taskId: "orchestrator-task",
+                taskInstanceId: rootTaskRequest.taskInstanceId!,
+                name: "orchestrator-agent",
+                next: new BranchNode({
+                    branches: [{
+                        branchId: "branch-group-1",
+                        branch: new GroupNode({
+                            groupId: "group-1",
+                            agents: [
+                                new AgentNode({ taskId: "child-task-1", taskInstanceId: publishedTask1.taskInstanceId!, name: "child-agent-1" }),
+                                new AgentNode({ taskId: "child-task-2", taskInstanceId: publishedTask2.taskInstanceId!, name: "child-agent-2" })
+                            ]
+                        })
+                    }]
+                })
             }));
 
             const actualFlow = await agenticFlowTracker.getFlow("test-correlation");
