@@ -18,8 +18,8 @@ export class AgenticFlowTracker {
     agentStatusTracker: AgentStatusTracker;
     flowsCollection: any;
 
-    constructor(private db: Db, private execContext: ExecutionContext) {
-        this.agentStatusTracker = new AgentStatusTracker(db, execContext);
+    constructor(private db: Db, private execContext: ExecutionContext, agentStatusTracker: AgentStatusTracker) {
+        this.agentStatusTracker = agentStatusTracker;
         this.flowsCollection = this.db.collection((this.execContext.config as GaleConfig).getCollections().flows);
     }
 

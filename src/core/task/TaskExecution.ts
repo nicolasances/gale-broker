@@ -47,7 +47,7 @@ export class TaskExecution {
             const client = await config.getMongoClient();
             const db = client.db(config.getDBName());
 
-            const tracker = new AgenticFlowTracker(db, this.execContext);
+            const tracker = new AgenticFlowTracker(db, this.execContext, new AgentStatusTracker(db, this.execContext));
 
             // 0. Find an available Agent that can execute the task.
             const agent = await new AgentsCatalog(db, this.execContext).findAgentByTaskId(task.taskId);
