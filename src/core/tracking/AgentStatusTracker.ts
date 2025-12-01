@@ -172,7 +172,6 @@ export class AgentStatusTracker {
 
     /**
      * Marks a branch as completed.
-     * 
      * @param branchId the branchId to mark as completed
      */
     async markBranchCompleted(branchId: string): Promise<void> {

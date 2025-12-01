@@ -282,7 +282,7 @@ export class TaskExecution {
         for (const group of subtaskGroups) {
 
             // Create a branch id 
-            const branchId = "branch-" + group.groupId;
+            const branchId = uuidv4();
 
             // Create the subtasks in the group
             const groupTasks = group.tasks.map((task) => {
