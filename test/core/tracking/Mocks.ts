@@ -281,14 +281,14 @@ export class MockAgentCallFactory implements AgentCallFactory {
     /**
      * Configure the response for a specific agent
      */
-    setAgentResponse(agentName: string, response: AgentTaskResponse): void {
-        this.responses.set(agentName, response);
+    setAgentResponse(agentTaskId: string, response: AgentTaskResponse): void {
+        this.responses.set(agentTaskId, response);
     }
 
     createAgentCall(agentDefinition: AgentDefinition): MockAgentCall {
-        const response = this.responses.get(agentDefinition.name);
+        const response = this.responses.get(agentDefinition.taskId);
         if (!response) {
-            throw new Error(`No response configured for agent ${agentDefinition.name}`);
+            throw new Error(`No response configured for agent ${agentDefinition.taskId}`);
         }
         return new MockAgentCall(agentDefinition, response);
     }

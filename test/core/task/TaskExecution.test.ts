@@ -12,45 +12,7 @@ import {
     MockAgentStatusTracker,
 } from "../tracking/Mocks";
 import { AgenticFlow, AgentNode, BranchNode, GroupNode } from "../../../src/core/tracking/AgenticFlow";
-
-/**
- * Utility function to remove prev and locked properties from flow for comparison
- */
-function removePrev(flow: AgenticFlow): any {
-    const visited = new WeakSet();
-    
-    function cloneWithoutPrev(obj: any): any {
-        if (obj === null || typeof obj !== 'object') {
-            return obj;
-        }
-        
-        if (visited.has(obj)) {
-            return undefined; // Skip circular references
-        }
-        
-        visited.add(obj);
-        
-        if (Array.isArray(obj)) {
-            return obj.map(item => cloneWithoutPrev(item));
-        }
-        
-        const cloned: any = {};
-        
-        for (const key in obj) {
-            if (key === 'prev' || key === 'locked') {
-                continue; // Skip prev and locked properties
-            }
-            
-            if (obj.hasOwnProperty(key)) {
-                cloned[key] = cloneWithoutPrev(obj[key]);
-            }
-        }
-        
-        return cloned;
-    }
-    
-    return cloneWithoutPrev(flow);
-}
+import { removePrev } from "./util/FlowUtils";
 
 describe("TaskExecution", () => {
 
@@ -97,247 +59,196 @@ describe("TaskExecution", () => {
         mockExecContext.config.messageBus.clear();
     });
 
-    describe("Root Agent Completion", () => {
+    it("simple agent completion", async () => {
+        // Setup: Register an agent
+        const agentDef = new AgentDefinition();
+        agentDef.taskId = "simple-task";
 
-        it("should execute a root agent that completes without spawning subtasks", async () => {
-            // Setup: Register an agent
-            const agentDef = AgentDefinition.fromJSON({
-                name: "simple-agent",
-                taskId: "simple-task",
-                description: "A simple test agent",
-                inputSchema: {},
-                outputSchema: {},
-                endpoint: {
-                    baseURL: "http://localhost:3000",
-                    executionPath: "/execute"
-                }
-            });
-            mockAgentsCatalog.registerAgent(agentDef);
+        mockAgentsCatalog.registerAgent(agentDef);
 
-            // Configure the agent to return a completed response
-            const completedResponse = new AgentTaskResponse({
-                correlationId: "test-correlation",
-                stopReason: "completed",
-                taskOutput: { result: "success" }
-            });
-            mockAgentCallFactory.setAgentResponse("simple-agent", completedResponse);
+        // Configure the agent to return a completed response
+        mockAgentCallFactory.setAgentResponse("simple-task", new AgentTaskResponse({ correlationId: "test-correlation", stopReason: "completed", taskOutput: { result: "success" } }));
 
-            // Create a root task request
-            const taskRequest = new AgentTaskRequest({
-                command: { command: "start" },
-                taskId: "simple-task",
-                taskInputData: { input: "test" }
-            });
-
-            // Execute the task
-            const response = await taskExecution.do(taskRequest);
-
-            // Verify the response
-            expect(response.stopReason).to.equal("completed");
-            expect(response.taskOutput).to.deep.equal({ result: "success" });
-
-            // Verify that the task was tracked
-            const allTasks = mockAgentStatusTracker.getAllTasks();
-            expect(allTasks).to.have.length(1);
-            expect(allTasks[0].status).to.equal("completed");
-            expect(allTasks[0].agentName).to.equal("simple-agent");
-            expect(allTasks[0].taskId).to.equal("simple-task");
-
-            // Verify that correlationId and taskInstanceId were assigned
-            expect(taskRequest.correlationId).to.exist;
-            expect(taskRequest.taskInstanceId).to.exist;
-
-            // Verify no subtasks were published
-            expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(0);
-
-            // Verify the flow
-            const expectedFlow = new AgenticFlow(taskRequest.correlationId!, new AgentNode({
-                taskId: "simple-task",
-                taskInstanceId: taskRequest.taskInstanceId!,
-                name: "simple-agent",
-            }));
-
-            const actualFlow = await agenticFlowTracker.getFlow(taskRequest.correlationId!);
-
-            expect(actualFlow).to.deep.equal(expectedFlow);
+        // Create a root task request
+        const taskRequest = new AgentTaskRequest({
+            command: { command: "start" },
+            taskId: "simple-task",
+            taskInputData: { input: "test" }
         });
 
+        // Execute the task
+        const response = await taskExecution.do(taskRequest);
+
+        // Verify the response
+        expect(response.stopReason).to.equal("completed");
+        expect(response.taskOutput).to.deep.equal({ result: "success" });
+
+        // Verify that the task was tracked
+        const allTasks = mockAgentStatusTracker.getAllTasks();
+        expect(allTasks).to.have.length(1);
+        expect(allTasks[0].status).to.equal("completed");
+        expect(allTasks[0].taskId).to.equal("simple-task");
+
+        // Verify that correlationId and taskInstanceId were assigned
+        expect(taskRequest.correlationId).to.exist;
+        expect(taskRequest.taskInstanceId).to.exist;
+
+        // Verify no subtasks were published
+        expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(0);
+
+        // Verify the flow
+        const expectedFlow = new AgenticFlow(taskRequest.correlationId!, new AgentNode({
+            taskId: "simple-task",
+            taskInstanceId: taskRequest.taskInstanceId!,
+        }));
+
+        const actualFlow = await agenticFlowTracker.getFlow(taskRequest.correlationId!);
+
+        expect(actualFlow).to.deep.equal(expectedFlow);
     });
 
-    describe("Root Agent with Subtasks", () => {
+    it("group execution", async () => {
+        // Setup: Register parent agent
+        const parentAgentDef = new AgentDefinition();
+        const childAgent1Def = new AgentDefinition();
+        const childAgent2Def = new AgentDefinition();
 
-        it("should execute a root agent that spawns a group of subtasks, then completes when subtasks are done", async () => {
-            // Setup: Register parent agent
-            const parentAgentDef = AgentDefinition.fromJSON({
-                name: "orchestrator-agent",
-                taskId: "orchestrator-task",
-                description: "Orchestrator agent",
-                inputSchema: {},
-                outputSchema: {},
-                endpoint: {
-                    baseURL: "http://localhost:3000",
-                    executionPath: "/execute"
+        parentAgentDef.taskId = "orchestrator-task";
+        childAgent1Def.taskId = "child-task-1";
+        childAgent2Def.taskId = "child-task-2";
+
+        mockAgentsCatalog.registerAgent(parentAgentDef);
+        mockAgentsCatalog.registerAgent(childAgent1Def);
+        mockAgentsCatalog.registerAgent(childAgent2Def);
+
+        // Step 1: Configure parent agent to return subtasks
+        const subtasksResponse = new AgentTaskResponse({
+            correlationId: "test-correlation",
+            stopReason: "subtasks",
+            subtasks: [
+                {
+                    groupId: "group-1",
+                    tasks: [
+                        { taskId: "child-task-1", taskInputData: { childInput: "data1" } },
+                        { taskId: "child-task-2", taskInputData: { childInput: "data2" } }
+                    ]
                 }
-            });
-            mockAgentsCatalog.registerAgent(parentAgentDef);
+            ]
+        });
+        mockAgentCallFactory.setAgentResponse("orchestrator-task", subtasksResponse);
 
-            // Setup: Register child agents
-            const childAgent1Def = AgentDefinition.fromJSON({
-                name: "child-agent-1",
-                taskId: "child-task-1",
-                description: "Child agent 1",
-                inputSchema: {},
-                outputSchema: {},
-                endpoint: {
-                    baseURL: "http://localhost:3001",
-                    executionPath: "/execute"
-                }
-            });
-            const childAgent2Def = AgentDefinition.fromJSON({
-                name: "child-agent-2",
-                taskId: "child-task-2",
-                description: "Child agent 2",
-                inputSchema: {},
-                outputSchema: {},
-                endpoint: {
-                    baseURL: "http://localhost:3002",
-                    executionPath: "/execute"
-                }
-            });
-            mockAgentsCatalog.registerAgent(childAgent1Def);
-            mockAgentsCatalog.registerAgent(childAgent2Def);
-
-            // Step 1: Configure parent agent to return subtasks
-            const subtasksResponse = new AgentTaskResponse({
-                correlationId: "test-correlation",
-                stopReason: "subtasks",
-                subtasks: [
-                    {
-                        groupId: "group-1",
-                        tasks: [
-                            { taskId: "child-task-1", taskInputData: { childInput: "data1" } },
-                            { taskId: "child-task-2", taskInputData: { childInput: "data2" } }
-                        ]
-                    }
-                ]
-            });
-            mockAgentCallFactory.setAgentResponse("orchestrator-agent", subtasksResponse);
-
-            // Execute the root task
-            const rootTaskRequest = new AgentTaskRequest({
-                command: { command: "start" },
-                taskId: "orchestrator-task",
-                correlationId: "test-correlation",
-                taskInputData: { input: "root-data" }
-            });
-
-            const rootResponse = await taskExecution.do(rootTaskRequest);
-
-            // Verify root response indicates subtasks were spawned
-            expect(rootResponse.stopReason).to.equal("subtasks");
-            expect(rootResponse.subtasks).to.have.length(1);
-
-            // Verify subtasks were published to message bus
-            expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(2);
-
-            // Verify subtasks have correct structure
-            const publishedTask1 = mockExecContext.config.messageBus.publishedTasks[0];
-            const publishedTask2 = mockExecContext.config.messageBus.publishedTasks[1];
-
-            expect(publishedTask1.taskId).to.equal("child-task-1");
-            expect(publishedTask1.correlationId).to.equal(rootTaskRequest.correlationId);
-            expect(publishedTask1.parentTask?.taskInstanceId).to.equal(rootTaskRequest.taskInstanceId);
-            expect(publishedTask1.taskGroupId).to.equal("group-1");
-
-            expect(publishedTask2.taskId).to.equal("child-task-2");
-            expect(publishedTask2.correlationId).to.equal(rootTaskRequest.correlationId);
-            expect(publishedTask2.parentTask?.taskInstanceId).to.equal(rootTaskRequest.taskInstanceId);
-            expect(publishedTask2.taskGroupId).to.equal("group-1");
-
-            // Step 2: Execute first child task
-            mockAgentCallFactory.setAgentResponse("child-agent-1", new AgentTaskResponse({
-                correlationId: "test-correlation",
-                stopReason: "completed",
-                taskOutput: { childResult: "result1" }
-            }));
-
-            const child1Response = await taskExecution.do(publishedTask1);
-            expect(child1Response.stopReason).to.equal("completed");
-
-            // Verify first child is marked completed but parent not resumed yet
-            const child1Task = mockAgentStatusTracker.getAllTasks().find(t => t.taskId === "child-task-1");
-            expect(child1Task?.status).to.equal("completed");
-
-            // Parent should not be resumed yet (group not complete)
-            expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(2);
-
-            // Step 3: Execute second child task
-            mockAgentCallFactory.setAgentResponse("child-agent-2", new AgentTaskResponse({
-                correlationId: "test-correlation",
-                stopReason: "completed",
-                taskOutput: { childResult: "result2" }
-            }));
-
-            const child2Response = await taskExecution.do(publishedTask2);
-            expect(child2Response.stopReason).to.equal("completed");
-
-            // Verify second child is marked completed
-            const child2Task = mockAgentStatusTracker.getAllTasks().find(t => t.taskId === "child-task-2");
-            expect(child2Task?.status).to.equal("completed");
-
-            // Now parent should be resumed (published as new task)
-            expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(3);
-            const resumeTask = mockExecContext.config.messageBus.publishedTasks[2];
-            expect(resumeTask.command.command).to.equal("resume");
-            expect(resumeTask.command.completedTaskGroupId).to.equal("group-1");
-            expect(resumeTask.taskId).to.equal("orchestrator-task");
-
-            // Step 4: Configure parent agent to complete on resume
-            mockAgentCallFactory.setAgentResponse("orchestrator-agent", new AgentTaskResponse({
-                correlationId: "test-correlation",
-                stopReason: "completed",
-                taskOutput: { finalResult: "all done" }
-            }));
-
-            // Execute the resume task
-            const resumeResponse = await taskExecution.do(resumeTask);
-            expect(resumeResponse.stopReason).to.equal("completed");
-            expect(resumeResponse.taskOutput).to.deep.equal({ finalResult: "all done" });
-
-            // Verify the original root task instance status
-            const parentTask = mockAgentStatusTracker.getAllTasks().find(
-                t => t.taskId === "orchestrator-task" && t.taskInstanceId === rootTaskRequest.taskInstanceId
-            );
-            // The original root instance should be completed after the branch is marked completed
-            expect(parentTask?.status).to.equal("completed");
-
-            // Verify the flow
-            // Get the actual branchId from the published tasks
-            const actualBranchId = publishedTask1.branchId!;
-            
-            const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
-                taskId: "orchestrator-task",
-                taskInstanceId: rootTaskRequest.taskInstanceId!,
-                name: "orchestrator-agent",
-                next: new BranchNode({
-                    branches: [{
-                        branchId: actualBranchId,
-                        branch: new GroupNode({
-                            groupId: "group-1",
-                            agents: [
-                                new AgentNode({ taskId: "child-task-1", taskInstanceId: publishedTask1.taskInstanceId! }),
-                                new AgentNode({ taskId: "child-task-2", taskInstanceId: publishedTask2.taskInstanceId! })
-                            ]
-                        })
-                    }]
-                })
-            }));
-
-            const actualFlow = await agenticFlowTracker.getFlow(rootTaskRequest.correlationId!);
-
-            expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
+        // Execute the root task
+        const rootTaskRequest = new AgentTaskRequest({
+            command: { command: "start" },
+            taskId: "orchestrator-task",
+            correlationId: "test-correlation",
+            taskInputData: { input: "root-data" }
         });
 
+        const rootResponse = await taskExecution.do(rootTaskRequest);
+
+        // Verify root response indicates subtasks were spawned
+        expect(rootResponse.stopReason).to.equal("subtasks");
+        expect(rootResponse.subtasks).to.have.length(1);
+
+        // Verify subtasks were published to message bus
+        expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(2);
+
+        // Verify subtasks have correct structure
+        const publishedTask1 = mockExecContext.config.messageBus.publishedTasks[0];
+        const publishedTask2 = mockExecContext.config.messageBus.publishedTasks[1];
+
+        expect(publishedTask1.taskId).to.equal("child-task-1");
+        expect(publishedTask1.correlationId).to.equal(rootTaskRequest.correlationId);
+        expect(publishedTask1.parentTask?.taskInstanceId).to.equal(rootTaskRequest.taskInstanceId);
+        expect(publishedTask1.taskGroupId).to.equal("group-1");
+
+        expect(publishedTask2.taskId).to.equal("child-task-2");
+        expect(publishedTask2.correlationId).to.equal(rootTaskRequest.correlationId);
+        expect(publishedTask2.parentTask?.taskInstanceId).to.equal(rootTaskRequest.taskInstanceId);
+        expect(publishedTask2.taskGroupId).to.equal("group-1");
+
+        // Step 2: Execute first child task
+        mockAgentCallFactory.setAgentResponse("child-task-1", new AgentTaskResponse({
+            correlationId: "test-correlation",
+            stopReason: "completed",
+            taskOutput: { childResult: "result1" }
+        }));
+
+        const child1Response = await taskExecution.do(publishedTask1);
+        expect(child1Response.stopReason).to.equal("completed");
+
+        // Verify first child is marked completed but parent not resumed yet
+        const child1Task = mockAgentStatusTracker.getAllTasks().find(t => t.taskId === "child-task-1");
+        expect(child1Task?.status).to.equal("completed");
+
+        // Parent should not be resumed yet (group not complete)
+        expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(2);
+
+        // Step 3: Execute second child task
+        mockAgentCallFactory.setAgentResponse("child-task-2", new AgentTaskResponse({
+            correlationId: "test-correlation",
+            stopReason: "completed",
+            taskOutput: { childResult: "result2" }
+        }));
+
+        const child2Response = await taskExecution.do(publishedTask2);
+        expect(child2Response.stopReason).to.equal("completed");
+
+        // Verify second child is marked completed
+        const child2Task = mockAgentStatusTracker.getAllTasks().find(t => t.taskId === "child-task-2");
+        expect(child2Task?.status).to.equal("completed");
+
+        // Now parent should be resumed (published as new task)
+        expect(mockExecContext.config.messageBus.publishedTasks).to.have.length(3);
+        const resumeTask = mockExecContext.config.messageBus.publishedTasks[2];
+        expect(resumeTask.command.command).to.equal("resume");
+        expect(resumeTask.command.completedTaskGroupId).to.equal("group-1");
+        expect(resumeTask.taskId).to.equal("orchestrator-task");
+
+        // Step 4: Configure parent agent to complete on resume
+        mockAgentCallFactory.setAgentResponse("orchestrator-task", new AgentTaskResponse({
+            correlationId: "test-correlation",
+            stopReason: "completed",
+            taskOutput: { finalResult: "all done" }
+        }));
+
+        // Execute the resume task
+        const resumeResponse = await taskExecution.do(resumeTask);
+        expect(resumeResponse.stopReason).to.equal("completed");
+        expect(resumeResponse.taskOutput).to.deep.equal({ finalResult: "all done" });
+
+        // Verify the original root task instance status
+        const parentTask = mockAgentStatusTracker.getAllTasks().find(
+            t => t.taskId === "orchestrator-task" && t.taskInstanceId === rootTaskRequest.taskInstanceId
+        );
+        // The original root instance should be completed after the branch is marked completed
+        expect(parentTask?.status).to.equal("completed");
+
+        // Verify the flow
+        // Get the actual branchId from the published tasks
+        const actualBranchId = publishedTask1.branchId!;
+
+        const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
+            taskId: "orchestrator-task",
+            taskInstanceId: rootTaskRequest.taskInstanceId!,
+            next: new BranchNode({
+                branches: [{
+                    branchId: actualBranchId,
+                    branch: new GroupNode({
+                        groupId: "group-1",
+                        agents: [
+                            new AgentNode({ taskId: "child-task-1", taskInstanceId: publishedTask1.taskInstanceId! }),
+                            new AgentNode({ taskId: "child-task-2", taskInstanceId: publishedTask2.taskInstanceId! })
+                        ]
+                    })
+                }]
+            })
+        }));
+
+        const actualFlow = await agenticFlowTracker.getFlow(rootTaskRequest.correlationId!);
+
+        expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
     });
 
 });
