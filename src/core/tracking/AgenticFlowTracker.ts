@@ -137,7 +137,7 @@ export class AgenticFlowTracker {
      * @param branches the branches to create
      * @param afterGroup the group (identified by the groupId) after which these branches are created. If afterGroup is null, branches are created at the root.
      */
-    async branch(branches: { branchId: string, tasks: AgentTaskRequest[] }[], afterGroup: string | null): Promise<void> {
+    async branch(branches: { branchId: string, tasks: AgentTaskRequest[] }[], after: {object: "agent" | "group", objectId: string} | null): Promise<void> {
 
         const correlationId = branches[0].tasks[0].correlationId;
         const parentTaskInstanceId = branches[0].tasks[0].parentTask?.taskInstanceId;
@@ -158,7 +158,7 @@ export class AgenticFlowTracker {
             // 2.2. Load the flow, update it, and save it back
             const flow = await this.flowsCollection.findOne({ correlationId: correlationId }) as AgenticFlow;
 
-            flow.branch(afterGroup, branches);
+            flow.branch(after, branches);
 
             await this.flowsCollection.updateOne(
                 { correlationId: correlationId },

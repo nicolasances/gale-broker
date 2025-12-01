@@ -28,11 +28,13 @@ import e from "express";
  * An (orchestrator) agent spawns multiple branches of subtasks and they all get executed.
  * Each branch just contains one agent each for simplicity.
  * 
- * 4. Branching with groups
- * An (orchestrator) agent spawns multiple branches, each containing a group of agents.
- * 
- * 5. Group followed by branching
+ * 4. Group followed by branching
  * An (orchestrator) agent spawns a group of agents, and upon their completion, spawns multiple branches.
+ * 
+ * 5. Branch started within in a group
+ * An (orchestrator) agent spawns two branches. 
+ * Within one branch, a group of agents is spawned.
+ * Within that group, one of the agents spawns two branches. Each branch contains one agent.
  * 
  */
 describe("TaskExecution", () => {
@@ -523,7 +525,7 @@ describe("TaskExecution", () => {
 
         // Now I expect branches  branch-g1.1 and branch-g1.2 to be done
         expect(await mockAgentStatusTracker.areBranchesCompleted([branchOfGroupG11!, branchOfGroupG12!])).to.be.true;
-        
+
         // Expect the main branch to be done since the two others are done
         expect(await mockAgentStatusTracker.areBranchesCompleted([branchG1!])).to.be.true;
 
@@ -573,6 +575,196 @@ describe("TaskExecution", () => {
         }));
         const actualFlow = await agenticFlowTracker.getFlow(cid);
 
+        expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
+    });
+
+    it("branch started within in a group", async () => {
+        /**
+         * 5. Branch started within in a group
+         * An (orchestrator) agent spawns two branches. 
+         * Within one branch, a group of agents is spawned.
+         * Within that group, one of the agents spawns two branches. Each branch contains one agent.
+         */
+
+        const cid = 'branch-in-group-correlation-id';
+        const msgBus = mockExecContext.config.messageBus;
+
+        const orchestrator = new AgentDefinition();
+        const a1 = new AgentDefinition();
+        const a2 = new AgentDefinition();
+
+        orchestrator.taskId = "orchestrator-task";
+        a1.taskId = "task-1";
+        a2.taskId = "task-2";
+
+        mockAgentsCatalog.registerAgent(orchestrator);
+        mockAgentsCatalog.registerAgent(a1);
+        mockAgentsCatalog.registerAgent(a2);
+
+        // Step 1: Orchestrator spawns two branches
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [
+                { groupId: "branch1-group", tasks: [
+                    { taskId: "task-1", taskInputData: { input: "branch1-t1" } },
+                    { taskId: "task-1", taskInputData: { input: "branch1-t2" } }
+                ]},
+                { groupId: "branch2-group", tasks: [{ taskId: "task-2", taskInputData: { input: "branch2" } }] }
+            ]
+        }));
+
+        const rootTaskRequest = new AgentTaskRequest({
+            command: { command: "start" },
+            taskId: orchestrator.taskId,
+            correlationId: cid,
+            taskInputData: { input: "root-data" }
+        });
+
+        await taskExecution.do(rootTaskRequest);
+        expect(msgBus.publishedTasks).to.have.length(3);
+
+        const branch1Task1 = msgBus.publishedTasks[0];
+        const branch1Task2 = msgBus.publishedTasks[1];
+        const branch2Task = msgBus.publishedTasks[2];
+        const branch1Id = branch1Task1.branchId!;
+        const branch2Id = branch2Task.branchId!;
+
+        expect(branch1Id).to.exist;
+        expect(branch2Id).to.exist;
+        expect(branch1Id).to.not.equal(branch2Id);
+        expect(branch1Task1.branchId).to.equal(branch1Task2.branchId);
+
+        // Step 2: Complete branch2 (simple completion)
+        mockAgentCallFactory.setAgentResponse(a2.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "branch2 done" } }));
+        await taskExecution.do(branch2Task);
+        expect(msgBus.publishedTasks).to.have.length(4); // +1 resume after branch2
+        expect(await mockAgentStatusTracker.areBranchesCompleted([branch2Id])).to.be.false;
+
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after branch2" } }));
+        await taskExecution.do(msgBus.publishedTasks[3]);
+        expect(await mockAgentStatusTracker.areBranchesCompleted([branch2Id])).to.be.true;  // Branch is marked as complete only when the parent said "nothing more to do after branch"
+
+        // Step 3: Complete branch1-task1 (simple completion)
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "branch1-t1 done" } }));
+        await taskExecution.do(branch1Task1);
+        expect(msgBus.publishedTasks).to.have.length(4); // No resume yet, group not complete
+
+        // Step 4: branch1-task2 spawns two branches with 2 tasks each
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [
+                { groupId: "nested-branch1", tasks: [
+                    { taskId: "task-1", taskInputData: { input: "nb1-t1" } },
+                    { taskId: "task-1", taskInputData: { input: "nb1-t2" } }
+                ]},
+                { groupId: "nested-branch2", tasks: [
+                    { taskId: "task-2", taskInputData: { input: "nb2-t1" } },
+                    { taskId: "task-2", taskInputData: { input: "nb2-t2" } }
+                ]}
+            ]
+        }));
+
+        await taskExecution.do(branch1Task2);
+        expect(msgBus.publishedTasks).to.have.length(8); // +4 branch tasks
+
+        const nb1T1 = msgBus.publishedTasks[4];
+        const nb1T2 = msgBus.publishedTasks[5];
+        const nb2T1 = msgBus.publishedTasks[6];
+        const nb2T2 = msgBus.publishedTasks[7];
+        const nestedBranch1Id = nb1T1.branchId!;
+        const nestedBranch2Id = nb2T1.branchId!;
+
+        expect(nestedBranch1Id).to.exist;
+        expect(nestedBranch2Id).to.exist;
+        expect(nestedBranch1Id).to.not.equal(nestedBranch2Id);
+
+        // Step 5: Complete nested-branch1 tasks
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "nb1-t1 done" } }));
+        await taskExecution.do(nb1T1);
+        expect(msgBus.publishedTasks).to.have.length(8);
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "nb1-t2 done" } }));
+        await taskExecution.do(nb1T2);
+        expect(msgBus.publishedTasks).to.have.length(9); // +1 resume
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after nb1" } }));
+        await taskExecution.do(msgBus.publishedTasks[8]);
+        expect(await mockAgentStatusTracker.areBranchesCompleted([nestedBranch1Id])).to.be.true;
+        expect(await mockAgentStatusTracker.areBranchesCompleted([branch1Id])).to.be.false; // Because nested-branch2 is not done yet
+
+        // Step 6: Complete nested-branch2 tasks
+        mockAgentCallFactory.setAgentResponse(a2.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "nb2-t1 done" } }));
+        await taskExecution.do(nb2T1);
+        expect(msgBus.publishedTasks).to.have.length(9);
+        expect(await mockAgentStatusTracker.areBranchesCompleted([nestedBranch2Id])).to.be.false;
+        
+        mockAgentCallFactory.setAgentResponse(a2.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "nb2-t2 done" } }));
+        await taskExecution.do(nb2T2);
+        expect(msgBus.publishedTasks).to.have.length(10); // +1 resume
+        expect(await mockAgentStatusTracker.areBranchesCompleted([nestedBranch2Id])).to.be.false;
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after nb2" } }));
+        await taskExecution.do(msgBus.publishedTasks[9]);
+        expect(await mockAgentStatusTracker.areBranchesCompleted([nestedBranch1Id, nestedBranch2Id])).to.be.true;
+        expect(await mockAgentStatusTracker.areBranchesCompleted([branch1Id])).to.be.true;
+
+        // Step 7: Now branch1's group is complete, resume
+        expect(msgBus.publishedTasks).to.have.length(10); // No more resumes: the flow is finished
+
+        // Verify the flow
+        const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
+            taskId: orchestrator.taskId,
+            taskInstanceId: rootTaskRequest.taskInstanceId!,
+            next: new BranchNode({
+                branches: [
+                    {
+                        branchId: branch1Id,
+                        branch: new GroupNode({
+                            groupId: "branch1-group",
+                            agents: [
+                                new AgentNode({ taskId: "task-1", taskInstanceId: branch1Task1.taskInstanceId! }),
+                                new AgentNode({
+                                    taskId: "task-1",
+                                    taskInstanceId: branch1Task2.taskInstanceId!,
+                                    next: new BranchNode({
+                                        branches: [
+                                            { 
+                                                branchId: nestedBranch1Id, 
+                                                branch: new GroupNode({
+                                                    groupId: "nested-branch1",
+                                                    agents: [
+                                                        new AgentNode({ taskId: "task-1", taskInstanceId: nb1T1.taskInstanceId! }),
+                                                        new AgentNode({ taskId: "task-1", taskInstanceId: nb1T2.taskInstanceId! })
+                                                    ]
+                                                })
+                                            },
+                                            { 
+                                                branchId: nestedBranch2Id, 
+                                                branch: new GroupNode({
+                                                    groupId: "nested-branch2",
+                                                    agents: [
+                                                        new AgentNode({ taskId: "task-2", taskInstanceId: nb2T1.taskInstanceId! }),
+                                                        new AgentNode({ taskId: "task-2", taskInstanceId: nb2T2.taskInstanceId! })
+                                                    ]
+                                                })
+                                            }
+                                        ]
+                                    })
+                                })
+                            ]
+                        })
+                    },
+                    {
+                        branchId: branch2Id,
+                        branch: new AgentNode({ taskId: "task-2", taskInstanceId: branch2Task.taskInstanceId! })
+                    }
+                ]
+            })
+        }));
+
+        const actualFlow = await agenticFlowTracker.getFlow(cid);
         expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
     });
 });

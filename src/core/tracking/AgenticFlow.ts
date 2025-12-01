@@ -99,10 +99,13 @@ export class AgenticFlow {
      * @param afterGroup the group (identified by the groupId) after which these branches are created
      * @param branches the different branches
      */
-    branch(afterGroup: string | null, branches: { branchId: string, tasks: AgentTaskRequest[] }[]): void {
+    branch(after: {object: "agent" | "group", objectId: string} | null, branches: { branchId: string, tasks: AgentTaskRequest[] }[]): void {
 
-        let parentNode = this.root.findGroupNode(afterGroup) as AbstractNode | null;
-        if (parentNode === null) parentNode = this.root as AbstractNode;
+        let parentNode = this.root; 
+        if (after) {
+            if (after.object === "agent") parentNode = this.root.findAgentNode(after.objectId) as AbstractNode;
+            else if (after.object === "group") parentNode = this.root.findGroupNode(after.objectId) as AbstractNode;
+        }
 
         parentNode.setNext(new BranchNode({
             branches: branches.map(branch => {
@@ -203,6 +206,9 @@ export abstract class AbstractNode {
     getPrev(): AbstractNode | null {
         return this.prev;
     }
+    getNext(): AbstractNode | null {
+        return this.next;
+    }
     getType(): "agent" | "group" | "branch" {
         return this.type;
     }
@@ -263,6 +269,11 @@ export class GroupNode extends AbstractNode {
         this.groupId = groupId;
         if (name) this.name = name;
         if (next) this.next = next;
+        
+        // Set up prev links for all agents in the group
+        for (const agent of this.agents) {
+            agent.setPrev(this);
+        }
     }
 
     findAgentNode(taskInstanceId: string): AgentNode | null {
@@ -275,6 +286,15 @@ export class GroupNode extends AbstractNode {
     }
 
     findBranchNode(branchId: string): BranchNode | null {
+        // Search within each agent's next property (for nested branches)
+        for (const agent of this.agents) {
+            const agentNext = agent.getNext();
+            if (agentNext) {
+                const found = agentNext.findBranchNode(branchId);
+                if (found) return found;
+            }
+        }
+        // Then search in the group's next property
         if (this.next) return this.next.findBranchNode(branchId);
         return null;
     }

@@ -121,7 +121,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, task.taskGroupId, tracker);
+                    }, {object: "agent", objectId: task.taskInstanceId!}, tracker);
 
                     return agentTaskResponse;
                 }
@@ -170,7 +170,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, task.command.completedTaskGroupId!, tracker);
+                    }, {object: "group", objectId: task.command.completedTaskGroupId!}, tracker);
 
                     return agentTaskResponse;
                 }
@@ -271,7 +271,7 @@ export class TaskExecution {
      * @param afterGroup the group (identified by the groupId) after which these subtasks are spawned
      * @param tracker the Agentic Flow tracker to use for tracking
      */
-    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, afterGroup: string | null, tracker: AgenticFlowTracker): Promise<void> {
+    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, after: {object: "agent" | "group", objectId: string} | null, tracker: AgenticFlowTracker): Promise<void> {
 
         const bus = this.config.messageBus;
 
@@ -328,7 +328,7 @@ export class TaskExecution {
         await Promise.all(publishPromises);
 
         // Track
-        await tracker.branch(branches, afterGroup);
+        await tracker.branch(branches, after);
     }
 
 }
