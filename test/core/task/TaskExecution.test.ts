@@ -381,7 +381,7 @@ describe("TaskExecution", () => {
         expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
     });
 
-    it("branching with groups", async () => {
+    it("group followed by branching", async () => {
         /**
          * Group followed by branching
          * An (orchestrator) agent spawns a group of agents, and upon their completion, spawns multiple branches.
