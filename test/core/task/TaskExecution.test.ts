@@ -13,7 +13,6 @@ import {
 } from "../tracking/Mocks";
 import { AgenticFlow, AgentNode, BranchNode, GroupNode } from "../../../src/core/tracking/AgenticFlow";
 import { removePrev } from "./util/FlowUtils";
-import e from "express";
 
 /**
  * Test cases: 
@@ -43,6 +42,26 @@ import e from "express";
  *  - When that agent completes, Branch 1 is considered complete.
  * - Branch 2 contains a group of 3 agents. 
  *  - When this group completes, Branch 2 is considered complete.
+ * 
+ * 7. Deep nesting (multi-level hierarchy)
+ * An orchestrator spawns a branch with a group. Within that group, an agent spawns a branch with another group.
+ * Within that nested group, an agent spawns yet another branch. Tests 3+ levels of nesting.
+ * 
+ * 8. Agent failure scenarios
+ * Tests error handling when agents fail at different levels:
+ * - Root agent failure
+ * - Agent failure within a group
+ * - Agent failure within a branch
+ * 
+ * 9. Multiple agents spawning branches within same group
+ * A group contains 3 agents. Two of them spawn their own branches while one completes normally.
+ * Tests concurrent branching from different agents in the same group.
+ * 
+ * 10. Sequential branching (NOT IMPLEMENTED - for future reference)
+ * After one set of branches completes, orchestrator spawns a completely new set of branches.
+ * 
+ * 11. Diamond/convergence pattern (NOT IMPLEMENTED - for future reference)
+ * Two branches that later converge to spawn the same follow-up work.
  * 
  */
 describe("TaskExecution", () => {
@@ -928,4 +947,441 @@ describe("TaskExecution", () => {
         const actualFlow = await agenticFlowTracker.getFlow(cid);
         expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
     });
+
+    it("deep nesting - multi-level hierarchy", async () => {
+        /**
+         * 7. Deep nesting (3+ levels)
+         * Orchestrator -> Branch -> Group -> Agent spawns Branch -> Group -> Agent spawns Branch -> Single Agent
+         */
+
+        const cid = 'deep-nesting-correlation-id';
+        const msgBus = mockExecContext.config.messageBus;
+
+        const orchestrator = new AgentDefinition();
+        const a1 = new AgentDefinition();
+
+        orchestrator.taskId = "orchestrator-task";
+        a1.taskId = "task-1";
+
+        mockAgentsCatalog.registerAgent(orchestrator);
+        mockAgentsCatalog.registerAgent(a1);
+
+        // Level 1: Orchestrator spawns a branch with a group
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [{
+                groupId: "level1-group",
+                tasks: [
+                    { taskId: "task-1", taskInputData: { level: "1-1" } },
+                    { taskId: "task-1", taskInputData: { level: "1-2" } }
+                ]
+            }]
+        }));
+
+        const rootTaskRequest = new AgentTaskRequest({
+            command: { command: "start" },
+            taskId: orchestrator.taskId,
+            correlationId: cid,
+            taskInputData: { input: "root" }
+        });
+
+        await taskExecution.do(rootTaskRequest);
+        expect(msgBus.publishedTasks).to.have.length(2);
+
+        const l1T1 = msgBus.publishedTasks[0];
+        const l1T2 = msgBus.publishedTasks[1];
+        const level1BranchId = l1T1.branchId!;
+
+        // Complete l1T1 normally
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "l1-t1 done" } }));
+        await taskExecution.do(l1T1);
+
+        // Level 2: l1T2 spawns nested branch with group
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [{
+                groupId: "level2-group",
+                tasks: [
+                    { taskId: "task-1", taskInputData: { level: "2-1" } },
+                    { taskId: "task-1", taskInputData: { level: "2-2" } }
+                ]
+            }]
+        }));
+
+        await taskExecution.do(l1T2);
+        expect(msgBus.publishedTasks).to.have.length(4);
+
+        const l2T1 = msgBus.publishedTasks[2];
+        const l2T2 = msgBus.publishedTasks[3];
+        const level2BranchId = l2T1.branchId!;
+
+        expect(level2BranchId).to.not.equal(level1BranchId);
+
+        // Complete l2T1 normally
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "l2-t1 done" } }));
+        await taskExecution.do(l2T1);
+
+        // Level 3: l2T2 spawns another branch with single agent
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [{
+                groupId: "level3-group",
+                tasks: [{ taskId: "task-1", taskInputData: { level: "3-1" } }]
+            }]
+        }));
+
+        await taskExecution.do(l2T2);
+        expect(msgBus.publishedTasks).to.have.length(5);
+
+        const l3T1 = msgBus.publishedTasks[4];
+        const level3BranchId = l3T1.branchId!;
+
+        expect(level3BranchId).to.not.equal(level2BranchId);
+        expect(level3BranchId).to.not.equal(level1BranchId);
+
+        // Complete level 3
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "l3-t1 done" } }));
+        await taskExecution.do(l3T1);
+        expect(msgBus.publishedTasks).to.have.length(6); // +1 resume
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after l3" } }));
+        await taskExecution.do(msgBus.publishedTasks[5]);
+        expect(await mockAgentStatusTracker.areBranchesCompleted([level3BranchId])).to.be.true;
+
+        // Complete level 2 group (resume l2T2's parent)
+        expect(msgBus.publishedTasks).to.have.length(7); // +1 resume after level2 group
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after l2 group" } }));
+        await taskExecution.do(msgBus.publishedTasks[6]);
+        expect(await mockAgentStatusTracker.areBranchesCompleted([level2BranchId])).to.be.true;
+
+        // Complete level 1 group (resume l1T2's parent)
+        expect(msgBus.publishedTasks).to.have.length(8); // +1 resume after level1 group
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "All done" } }));
+        await taskExecution.do(msgBus.publishedTasks[7]);
+        expect(await mockAgentStatusTracker.areBranchesCompleted([level1BranchId])).to.be.true;
+
+        // Verify flow structure
+        const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
+            taskId: orchestrator.taskId,
+            taskInstanceId: rootTaskRequest.taskInstanceId!,
+            next: new BranchNode({
+                branches: [{
+                    branchId: level1BranchId,
+                    branch: new GroupNode({
+                        groupId: "level1-group",
+                        agents: [
+                            new AgentNode({ taskId: "task-1", taskInstanceId: l1T1.taskInstanceId! }),
+                            new AgentNode({
+                                taskId: "task-1",
+                                taskInstanceId: l1T2.taskInstanceId!,
+                                next: new BranchNode({
+                                    branches: [{
+                                        branchId: level2BranchId,
+                                        branch: new GroupNode({
+                                            groupId: "level2-group",
+                                            agents: [
+                                                new AgentNode({ taskId: "task-1", taskInstanceId: l2T1.taskInstanceId! }),
+                                                new AgentNode({
+                                                    taskId: "task-1",
+                                                    taskInstanceId: l2T2.taskInstanceId!,
+                                                    next: new BranchNode({
+                                                        branches: [{
+                                                            branchId: level3BranchId,
+                                                            branch: new AgentNode({ taskId: "task-1", taskInstanceId: l3T1.taskInstanceId! })
+                                                        }]
+                                                    })
+                                                })
+                                            ]
+                                        })
+                                    }]
+                                })
+                            })
+                        ]
+                    })
+                }]
+            })
+        }));
+
+        const actualFlow = await agenticFlowTracker.getFlow(cid);
+        expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
+    });
+
+    it("agent failure scenarios", async () => {
+        /**
+         * 8. Tests various failure scenarios:
+         * - Agent failure within a group
+         * - Verifies the failure is tracked and flow stops appropriately
+         */
+
+        const cid = 'failure-correlation-id';
+        const msgBus = mockExecContext.config.messageBus;
+
+        const orchestrator = new AgentDefinition();
+        const a1 = new AgentDefinition();
+
+        orchestrator.taskId = "orchestrator-task";
+        a1.taskId = "task-1";
+
+        mockAgentsCatalog.registerAgent(orchestrator);
+        mockAgentsCatalog.registerAgent(a1);
+
+        // Orchestrator spawns a group
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [{
+                groupId: "test-group",
+                tasks: [
+                    { taskId: "task-1", taskInputData: { input: "t1" } },
+                    { taskId: "task-1", taskInputData: { input: "t2" } }
+                ]
+            }]
+        }));
+
+        const rootTaskRequest = new AgentTaskRequest({
+            command: { command: "start" },
+            taskId: orchestrator.taskId,
+            correlationId: cid,
+            taskInputData: { input: "root" }
+        });
+
+        await taskExecution.do(rootTaskRequest);
+        expect(msgBus.publishedTasks).to.have.length(2);
+
+        const t1 = msgBus.publishedTasks[0];
+        const t2 = msgBus.publishedTasks[1];
+
+        // First agent completes successfully
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "completed",
+            taskOutput: { result: "t1 done" }
+        }));
+        await taskExecution.do(t1);
+
+        const t1Task = mockAgentStatusTracker.getAllTasks().find(task => task.taskInstanceId === t1.taskInstanceId);
+        expect(t1Task?.status).to.equal("completed");
+
+        // Second agent fails
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "failed"
+        }));
+        const failureResponse = await taskExecution.do(t2);
+
+        expect(failureResponse.stopReason).to.equal("failed");
+
+        // Verify the failed task is tracked
+        const t2Task = mockAgentStatusTracker.getAllTasks().find(task => task.taskInstanceId === t2.taskInstanceId);
+        expect(t2Task?.status).to.equal("failed");
+
+        // Verify no resume task was published (group didn't complete due to failure)
+        expect(msgBus.publishedTasks).to.have.length(2);
+
+        // Test root agent failure
+        const failedRootRequest = new AgentTaskRequest({
+            command: { command: "start" },
+            taskId: orchestrator.taskId,
+            correlationId: "root-failure-cid",
+            taskInputData: { input: "root" }
+        });
+
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({
+            correlationId: "root-failure-cid",
+            stopReason: "failed"
+        }));
+
+        const rootFailureResponse = await taskExecution.do(failedRootRequest);
+        expect(rootFailureResponse.stopReason).to.equal("failed");
+
+        const rootTask = mockAgentStatusTracker.getAllTasks().find(
+            task => task.taskInstanceId === failedRootRequest.taskInstanceId
+        );
+        expect(rootTask?.status).to.equal("failed");
+    });
+
+    it("multiple agents spawning branches within same group", async () => {
+        /**
+         * 9. Group contains 3 agents. Two of them spawn branches, one completes normally.
+         * Tests concurrent branching from different agents in the same group.
+         */
+
+        const cid = 'multi-branch-group-correlation-id';
+        const msgBus = mockExecContext.config.messageBus;
+
+        const orchestrator = new AgentDefinition();
+        const a1 = new AgentDefinition();
+
+        orchestrator.taskId = "orchestrator-task";
+        a1.taskId = "task-1";
+
+        mockAgentsCatalog.registerAgent(orchestrator);
+        mockAgentsCatalog.registerAgent(a1);
+
+        // Orchestrator spawns a group of 3 agents
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [{
+                groupId: "main-group",
+                tasks: [
+                    { taskId: "task-1", taskInputData: { input: "agent1" } },
+                    { taskId: "task-1", taskInputData: { input: "agent2" } },
+                    { taskId: "task-1", taskInputData: { input: "agent3" } }
+                ]
+            }]
+        }));
+
+        const rootTaskRequest = new AgentTaskRequest({
+            command: { command: "start" },
+            taskId: orchestrator.taskId,
+            correlationId: cid,
+            taskInputData: { input: "root" }
+        });
+
+        await taskExecution.do(rootTaskRequest);
+        expect(msgBus.publishedTasks).to.have.length(3);
+
+        const agent1 = msgBus.publishedTasks[0];
+        const agent2 = msgBus.publishedTasks[1];
+        const agent3 = msgBus.publishedTasks[2];
+        const mainBranchId = agent1.branchId!;
+
+        // Agent1 spawns branches
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [
+                { groupId: "agent1-branch1", tasks: [{ taskId: "task-1", taskInputData: { input: "a1-b1" } }] },
+                { groupId: "agent1-branch2", tasks: [{ taskId: "task-1", taskInputData: { input: "a1-b2" } }] }
+            ]
+        }));
+
+        await taskExecution.do(agent1);
+        expect(msgBus.publishedTasks).to.have.length(5);
+
+        const a1B1 = msgBus.publishedTasks[3];
+        const a1B2 = msgBus.publishedTasks[4];
+        const agent1Branch1Id = a1B1.branchId!;
+        const agent1Branch2Id = a1B2.branchId!;
+
+        // Agent2 spawns branches
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "subtasks",
+            subtasks: [
+                { groupId: "agent2-branch1", tasks: [{ taskId: "task-1", taskInputData: { input: "a2-b1" } }] }
+            ]
+        }));
+
+        await taskExecution.do(agent2);
+        expect(msgBus.publishedTasks).to.have.length(6);
+
+        const a2B1 = msgBus.publishedTasks[5];
+        const agent2Branch1Id = a2B1.branchId!;
+
+        // Agent3 completes normally
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
+            correlationId: cid,
+            stopReason: "completed",
+            taskOutput: { result: "agent3 done" }
+        }));
+
+        await taskExecution.do(agent3);
+        expect(msgBus.publishedTasks).to.have.length(6); // No resume yet, branches not complete
+
+        // Complete agent1's branches
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "a1-b1 done" } }));
+        await taskExecution.do(a1B1);
+        expect(msgBus.publishedTasks).to.have.length(7); // +1 resume
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after a1-b1" } }));
+        await taskExecution.do(msgBus.publishedTasks[6]);
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "a1-b2 done" } }));
+        await taskExecution.do(a1B2);
+        expect(msgBus.publishedTasks).to.have.length(8); // +1 resume
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after a1-b2" } }));
+        await taskExecution.do(msgBus.publishedTasks[7]);
+
+        expect(await mockAgentStatusTracker.areBranchesCompleted([agent1Branch1Id, agent1Branch2Id])).to.be.true;
+
+        // Complete agent2's branch
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "a2-b1 done" } }));
+        await taskExecution.do(a2B1);
+        expect(msgBus.publishedTasks).to.have.length(9); // +1 resume
+
+        mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after a2-b1" } }));
+        await taskExecution.do(msgBus.publishedTasks[8]);
+
+        expect(await mockAgentStatusTracker.areBranchesCompleted([agent2Branch1Id])).to.be.true;
+
+        // Now the entire main group should be done, triggering orchestrator resume
+        expect(msgBus.publishedTasks).to.have.length(10); // +1 resume after main group
+
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "All done" } }));
+        await taskExecution.do(msgBus.publishedTasks[9]);
+
+        expect(await mockAgentStatusTracker.areBranchesCompleted([mainBranchId])).to.be.true;
+
+        // Verify flow
+        const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
+            taskId: orchestrator.taskId,
+            taskInstanceId: rootTaskRequest.taskInstanceId!,
+            next: new BranchNode({
+                branches: [{
+                    branchId: mainBranchId,
+                    branch: new GroupNode({
+                        groupId: "main-group",
+                        agents: [
+                            new AgentNode({
+                                taskId: "task-1",
+                                taskInstanceId: agent1.taskInstanceId!,
+                                next: new BranchNode({
+                                    branches: [
+                                        { branchId: agent1Branch1Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a1B1.taskInstanceId! }) },
+                                        { branchId: agent1Branch2Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a1B2.taskInstanceId! }) }
+                                    ]
+                                })
+                            }),
+                            new AgentNode({
+                                taskId: "task-1",
+                                taskInstanceId: agent2.taskInstanceId!,
+                                next: new BranchNode({
+                                    branches: [
+                                        { branchId: agent2Branch1Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a2B1.taskInstanceId! }) }
+                                    ]
+                                })
+                            }),
+                            new AgentNode({ taskId: "task-1", taskInstanceId: agent3.taskInstanceId! })
+                        ]
+                    })
+                }]
+            })
+        }));
+
+        const actualFlow = await agenticFlowTracker.getFlow(cid);
+        expect(removePrev(actualFlow!)).to.deep.equal(removePrev(expectedFlow));
+    });
+
+    it.skip("sequential branching - NOT IMPLEMENTED", async () => {
+        /**
+         * 10. Sequential branching (future feature)
+         * After one set of branches completes, orchestrator spawns a completely new set of branches.
+         * This would require the system to support continuing execution after all branches complete.
+         */
+    });
+
+    it.skip("diamond convergence pattern - NOT IMPLEMENTED", async () => {
+        /**
+         * 11. Diamond/convergence pattern (future feature)
+         * Two branches that later converge to spawn the same follow-up work.
+         * This would require the system to detect and handle convergence points.
+         */
+    });
 });
+
