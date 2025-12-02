@@ -123,6 +123,29 @@ export class AgenticFlow {
         }));
     }
 
+    /**
+     * Appends tasks after the specified node in the flow.
+     * 
+     * @param after the node after which the tasks will be appended
+     * @param tasks the tasks to append as either a GroupNode or an AgentNode
+     */
+    append(after: {object: "agent" | "group" | "branch", objectId: string} | null, tasks: AgentTaskRequest[]): void {
+
+        let parentNode = this.root; 
+        if (after) {
+            if (after.object === "agent") parentNode = this.root.findAgentNode(after.objectId) as AbstractNode;
+            else if (after.object === "group") parentNode = this.root.findGroupNode(after.objectId) as AbstractNode;
+        }
+
+        if (tasks.length === 1) parentNode.setNext(new AgentNode({ taskId: tasks[0].taskId, taskInstanceId: tasks[0].taskInstanceId! }));
+        else {
+            parentNode.setNext(new GroupNode({
+                agents: tasks.map(task => new AgentNode({ taskId: task.taskId, taskInstanceId: task.taskInstanceId! })),
+                groupId: tasks[0].taskGroupId!,
+            }));
+        }
+    }
+
     siblingBranches(branchId: string): string[] {
 
         // 1. Find the branch node

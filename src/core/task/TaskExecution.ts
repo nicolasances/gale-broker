@@ -83,7 +83,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, null, tracker);
+                    }, null, null, tracker);
 
                     return agentTaskResponse;
                 }
@@ -121,7 +121,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, {object: "agent", objectId: task.taskInstanceId!}, tracker);
+                    }, {object: "agent", objectId: task.taskInstanceId!}, task.branchId || null, tracker);
 
                     return agentTaskResponse;
                 }
@@ -134,7 +134,6 @@ export class TaskExecution {
                 const branchId = task.command.branchId; // Branch on which the completed task group (or lone agent) is located
 
                 if (!completedGroupId) throw new ValidationError(400, "Missing completedTaskGroupId in command to resume parent task. Task Id: " + task.taskId);
-                if (!branchId) throw new ValidationError(400, "Missing branchId in command to resume parent task. Task Id: " + task.taskId);
 
                 // Resume the parent <=> ask if there is more to do on the branch or not
                 const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
@@ -147,16 +146,24 @@ export class TaskExecution {
                 else if (agentTaskResponse.stopReason === 'completed') {
                     // The parent agent is saying it's done with this branch
 
-                    // Mark the branch as completed
-                    await tracker.markBranchCompleted(task.correlationId!, branchId);
-
-                    // Check if the branches siblings to this one are also already completed
-                    const branchesCompleted = await tracker.areSiblingBranchesCompleted(task.correlationId!, branchId);
-
-                    if (branchesCompleted) {
+                    if (branchId) {
+                        // Mark the branch as completed
+                        await tracker.markBranchCompleted(task.correlationId!, branchId);
+    
+                        // Check if the branches siblings to this one are also already completed
+                        const branchesCompleted = await tracker.areSiblingBranchesCompleted(task.correlationId!, branchId);
+    
+                        if (branchesCompleted) {
+                            await tracker.agentCompleted(task, agentTaskResponse);
+    
+                            // TODO: gather the outputs of all branches and return the final output instead of the current one
+                            return agentTaskResponse;
+                        }
+                    }
+                    else {
                         await tracker.agentCompleted(task, agentTaskResponse);
 
-                        // TODO: gather the outputs of all branches and return the final output instead of the current one
+                        // TODO: gather the outputs and return the final output instead of the current one
                         return agentTaskResponse;
                     }
 
@@ -170,7 +177,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, {object: "group", objectId: task.command.completedTaskGroupId!}, tracker);
+                    }, {object: "group", objectId: task.command.completedTaskGroupId!}, branchId || null, tracker);
 
                     return agentTaskResponse;
                 }
@@ -266,12 +273,18 @@ export class TaskExecution {
      * 
      * This concretely uses the Message Bus to publish the subtask requests.
      * 
+     * BRANCHING LOGIC
+     * ------------------
+     * When more than 1 group is spawned, branches are created. 
+     * When a single group is spawned, no branch is created and the subtasks are attached to the current branch. If there is no current branch (i.e. there is only a single path from the root), the subtasks are kept with no branch.
+     * 
      * @param subtasks subtasks to be spawn off
      * @param parentTask info about the parent task
      * @param afterGroup the group (identified by the groupId) after which these subtasks are spawned
+     * @param branchId the branch id on which these subtasks are spawned. If null, these subtasks are spawned at the root. NOTE: read above to understand the branching logic
      * @param tracker the Agentic Flow tracker to use for tracking
      */
-    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, after: {object: "agent" | "group", objectId: string} | null, tracker: AgenticFlowTracker): Promise<void> {
+    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, after: {object: "agent" | "group", objectId: string} | null, branchId: string | null, tracker: AgenticFlowTracker): Promise<void> {
 
         const bus = this.config.messageBus;
 
@@ -282,7 +295,7 @@ export class TaskExecution {
         for (const group of subtaskGroups) {
 
             // Create a branch id 
-            const branchId = uuidv4();
+            const newBranchId = subtaskGroups.length > 1 ? uuidv4() : (branchId || undefined);
 
             // Create the subtasks in the group
             const groupTasks = group.tasks.map((task) => {
@@ -294,11 +307,11 @@ export class TaskExecution {
                     taskInputData: task.taskInputData,
                     parentTask: parentTask,
                     taskGroupId: group.groupId,
-                    branchId: branchId,
+                    branchId: newBranchId,
                 });
             })
 
-            branches.push({ branchId, tasks: groupTasks });
+            branches.push({ branchId: newBranchId || "NA", tasks: groupTasks });
 
             // Publish each subtask to the bus
             for (const task of groupTasks) {
@@ -327,8 +340,9 @@ export class TaskExecution {
         // Wait for all to be published
         await Promise.all(publishPromises);
 
-        // Track
-        await tracker.branch(branches, after);
+        // Track - only create branches if there is more than 1 branch
+        if (branches.length > 1) await tracker.branch(branches, after);
+        else await tracker.append(branches[0].tasks, after);
     }
 
 }

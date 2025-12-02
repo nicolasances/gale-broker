@@ -137,7 +137,7 @@ export class AgenticFlowTracker {
      * @param branches the branches to create
      * @param afterGroup the group (identified by the groupId) after which these branches are created. If afterGroup is null, branches are created at the root.
      */
-    async branch(branches: { branchId: string, tasks: AgentTaskRequest[] }[], after: {object: "agent" | "group", objectId: string} | null): Promise<void> {
+    async branch(branches: { branchId: string, tasks: AgentTaskRequest[] }[], after: { object: "agent" | "group", objectId: string } | null): Promise<void> {
 
         const correlationId = branches[0].tasks[0].correlationId;
         const parentTaskInstanceId = branches[0].tasks[0].parentTask?.taskInstanceId;
@@ -172,6 +172,47 @@ export class AgenticFlowTracker {
             // Release the lock
             await this.releaseFlowLock(correlationId);
         }
+    }
+
+    /**
+     * Appends tasks to an existing group or agent in the flow (in the "next" position).
+     * 
+     * @param tasks the tasks to append as either a GroupNode or an AgentNode
+     * @param after the element (group or agent) to which the tasks will be appended
+     */
+    async append(tasks: AgentTaskRequest[], after: { object: "agent" | "group", objectId: string } | null): Promise<void> {
+
+        const correlationId = tasks[0].correlationId;
+
+        if (!correlationId) throw new ValidationError(400, "[Agentic Flow Tracker]: Missing correlationId when appending tasks.");
+
+        // 1. Track the publishing of the agents' tasks and the creation of the branch
+        await this.agentStatusTracker.agentTasksPublished(tasks);
+
+        // 2. Update the Agentic Flow structure in the database
+        // 2.1. Lock the flow for update
+        await this.lockFlow(correlationId);
+
+        try {
+
+            // 2.2. Load the flow, update it, and save it back
+            const flow = await this.flowsCollection.findOne({ correlationId: correlationId }) as AgenticFlow;
+
+            flow.append(after, tasks);
+
+            await this.flowsCollection.updateOne(
+                { correlationId: correlationId },
+                { $set: { root: flow.root } }
+            );
+
+        } catch (error) {
+            throw error;
+        }
+        finally {
+            // Release the lock
+            await this.releaseFlowLock(correlationId);
+        }
+
     }
 
     /**
