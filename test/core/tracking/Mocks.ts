@@ -161,10 +161,10 @@ export class MockAgentStatusTracker {
         }
     }
 
-    async findGroupTasks(groupId: string): Promise<TaskStatusRecord[]> {
+    async findGroupTasks(correlationId: string, groupId: string): Promise<TaskStatusRecord[]> {
         const results: TaskStatusRecord[] = [];
         for (const record of this.tasks.values()) {
-            if (record.groupId === groupId) {
+            if (record.correlationId === correlationId && record.groupId === groupId) {
                 results.push(record);
             }
         }

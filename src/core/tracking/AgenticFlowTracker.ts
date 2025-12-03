@@ -220,10 +220,10 @@ export class AgenticFlowTracker {
      * 
      * @param taskGroupId The ID of the task group to check.
      */
-    async isGroupDone(taskGroupId: string): Promise<boolean> {
+    async isGroupDone(correlationId: string, taskGroupId: string): Promise<boolean> {
 
         // Find the tasks in the group 
-        const tasks = await this.agentStatusTracker.findGroupTasks(taskGroupId);
+        const tasks = await this.agentStatusTracker.findGroupTasks(correlationId, taskGroupId);
 
         // Check if all tasks have status "completed"
         return tasks.every(task => task.status === "completed");

@@ -107,21 +107,14 @@ export class TaskExecution {
                     // TODO: resume the parent task with failure info - or retry automatically once before resuming the parent
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
-                    await tracker.agentCompleted(task, agentTaskResponse);
-
-                    // Check if all subtasks in the group are done and if so, RESUME the parent task
-                    const groupDone = await tracker.isGroupDone(task.taskGroupId);
-
-                    if (groupDone) await this.resumeParentTask(task.taskGroupId, task.parentTask!.taskInstanceId, task.correlationId!, tracker.agentStatusTracker);
-
-                    return agentTaskResponse;
+                    return this.markAgentCompleted(task, agentTaskResponse, tracker);
                 }
                 else if (agentTaskResponse.stopReason === 'subtasks') {
                     await this.spawnSubtasks(agentTaskResponse.subtasks!, {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, {object: "agent", objectId: task.taskInstanceId!}, task.branchId || null, tracker);
+                    }, { object: "agent", objectId: task.taskInstanceId! }, task.branchId || null, tracker);
 
                     return agentTaskResponse;
                 }
@@ -149,22 +142,16 @@ export class TaskExecution {
                     if (branchId) {
                         // Mark the branch as completed
                         await tracker.markBranchCompleted(task.correlationId!, branchId);
-    
+
                         // Check if the branches siblings to this one are also already completed
                         const branchesCompleted = await tracker.areSiblingBranchesCompleted(task.correlationId!, branchId);
-    
+
                         if (branchesCompleted) {
-                            await tracker.agentCompleted(task, agentTaskResponse);
-    
-                            // TODO: gather the outputs of all branches and return the final output instead of the current one
-                            return agentTaskResponse;
+                            return this.markAgentCompleted(task, agentTaskResponse, tracker);
                         }
                     }
                     else {
-                        await tracker.agentCompleted(task, agentTaskResponse);
-
-                        // TODO: gather the outputs and return the final output instead of the current one
-                        return agentTaskResponse;
+                        return this.markAgentCompleted(task, agentTaskResponse, tracker);
                     }
 
                     // Not all branches are completed yet: wait for the others
@@ -177,7 +164,7 @@ export class TaskExecution {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
                         correlationId: task.correlationId!,
-                    }, {object: "group", objectId: task.command.completedTaskGroupId!}, branchId || null, tracker);
+                    }, { object: "group", objectId: task.command.completedTaskGroupId! }, branchId || null, tracker);
 
                     return agentTaskResponse;
                 }
@@ -209,6 +196,31 @@ export class TaskExecution {
     }
 
     /**
+     * Marks the agent as completed and checks if the parent task group is done to potentially resume the parent task.
+     * 
+     * @param task the task that the agent was performing (could also be a resume task)
+     * @param agentTaskResponse the response of the agent
+     * @param tracker the tracker
+     * @returns 
+     */
+    private async markAgentCompleted(task: AgentTaskRequest, agentTaskResponse: AgentTaskResponse, tracker: AgenticFlowTracker): Promise<AgentTaskResponse> {
+
+        await tracker.agentCompleted(task, agentTaskResponse);
+
+        // If the parent was part of a group, check if the group is now done. 
+        if (task.taskGroupId) {
+
+            // Check if all subtasks in the group are done and if so, RESUME the parent task
+            const groupDone = await tracker.isGroupDone(task.correlationId!, task.taskGroupId);
+
+            if (groupDone) await this.resumeParentTask(task.taskGroupId, task.parentTask!.taskInstanceId, task.correlationId!, tracker.agentStatusTracker);
+
+        }
+
+        return agentTaskResponse;
+    }
+
+    /**
      * Resumes the parent task after all subtasks in a group have been completed.
      * 
      * This method also makes sure that the parent task is not already resumed by another concurrent process.
@@ -231,7 +243,7 @@ export class TaskExecution {
             if (parentTask?.completedSubtaskGroups?.includes(taskGroupId)) return; // Already resumed
 
             // Get all the subtasks in the group and the parent task 
-            const groupTasks = await statusTracker.findGroupTasks(taskGroupId);
+            const groupTasks = await statusTracker.findGroupTasks(correlationId, taskGroupId);
 
             if (!parentTask) throw new TotoRuntimeError(500, `Could not find parent task with instance id ${parentTaskInstanceId} to resume it after completing subtasks in group ${taskGroupId}.`);
 
@@ -245,6 +257,11 @@ export class TaskExecution {
                 correlationId: correlationId,
                 taskId: parentTask.taskId,
                 taskInstanceId: parentTask.taskInstanceId,
+                taskGroupId: parentTask.groupId,
+                parentTask: parentTask.parentTaskInstanceId ? {
+                    taskId: parentTask.parentTaskId!,
+                    taskInstanceId: parentTask.parentTaskInstanceId
+                } : undefined,
                 taskInputData: {
                     originalInput: parentTask?.taskInput.originalInput || parentTask?.taskInput,
                     childrenOutputs: groupTasks.map(child => child.taskOutput),
@@ -284,7 +301,7 @@ export class TaskExecution {
      * @param branchId the branch id on which these subtasks are spawned. If null, these subtasks are spawned at the root. NOTE: read above to understand the branching logic
      * @param tracker the Agentic Flow tracker to use for tracking
      */
-    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, after: {object: "agent" | "group", objectId: string} | null, branchId: string | null, tracker: AgenticFlowTracker): Promise<void> {
+    private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, after: { object: "agent" | "group", objectId: string } | null, branchId: string | null, tracker: AgenticFlowTracker): Promise<void> {
 
         const bus = this.config.messageBus;
 

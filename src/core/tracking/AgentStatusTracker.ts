@@ -140,9 +140,9 @@ export class AgentStatusTracker {
      * @param groupId the group id of the subtasks
      * @returns 
      */
-    async findGroupTasks(groupId: string): Promise<TaskStatusRecord[]> {
+    async findGroupTasks(correlationId: string, groupId: string): Promise<TaskStatusRecord[]> {
 
-        const children = await this.db.collection(this.config.getCollections().tasks).find({ groupId: groupId }).toArray();
+        const children = await this.db.collection(this.config.getCollections().tasks).find({ correlationId: correlationId, groupId: groupId }).toArray();
 
         return children.map(doc => doc as any as TaskStatusRecord);
     }

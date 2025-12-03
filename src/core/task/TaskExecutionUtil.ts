@@ -3,9 +3,9 @@ import { AgentTaskRequest } from "../../model/AgentTask";
 
 export function getTaskExecutionScenario(task: AgentTaskRequest): "subtaskExecution" | "rootTaskStart" | "parentTaskResumption" {
 
-    if (task.parentTask) return "subtaskExecution";
-
     if (task.command.command == 'resume') return "parentTaskResumption";
+
+    if (task.parentTask) return "subtaskExecution";
 
     return "rootTaskStart";
 }

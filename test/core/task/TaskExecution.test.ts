@@ -701,7 +701,9 @@ describe("TaskExecution", () => {
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "nb1-t2 done" } }));
         await taskExecution.do(nb1T2);
         expect(msgBus.publishedTasks).to.have.length(9); // +1 resume
+        expect(await agenticFlowTracker.isGroupDone(cid, "nested-branch1")).to.be.true;
 
+        // Resuming B1T2 => nothing more to do after nested-branch1
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after nb1" } }));
         await taskExecution.do(msgBus.publishedTasks[8]);
         expect(await mockAgentStatusTracker.areBranchesCompleted([nestedBranch1Id])).to.be.true;
@@ -723,8 +725,13 @@ describe("TaskExecution", () => {
         expect(await mockAgentStatusTracker.areBranchesCompleted([nestedBranch1Id, nestedBranch2Id])).to.be.true;
         expect(await mockAgentStatusTracker.areBranchesCompleted([branch1Id])).to.be.true;
 
-        // Step 7: Now branch1's group is complete, resume
-        expect(msgBus.publishedTasks).to.have.length(10); // No more resumes: the flow is finished
+        expect(await agenticFlowTracker.isGroupDone(cid, "branch1-group")).to.be.true;
+
+        // Step 7: Now branch1's group is complete, resume the orchestrator after branch1
+        expect(msgBus.publishedTasks).to.have.length(11);
+        mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "flow done" } }));
+        await taskExecution.do(msgBus.publishedTasks[10]);
+        expect(msgBus.publishedTasks).to.have.length(11);
 
         // Verify the flow
         const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
@@ -991,7 +998,7 @@ describe("TaskExecution", () => {
 
         const l1T1 = msgBus.publishedTasks[0];
         const l1T2 = msgBus.publishedTasks[1];
-        const level1BranchId = l1T1.branchId!;
+        expect(l1T1.branchId!).to.be.undefined;
 
         // Complete l1T1 normally
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "l1-t1 done" } }));
@@ -1015,9 +1022,7 @@ describe("TaskExecution", () => {
 
         const l2T1 = msgBus.publishedTasks[2];
         const l2T2 = msgBus.publishedTasks[3];
-        const level2BranchId = l2T1.branchId!;
-
-        expect(level2BranchId).to.not.equal(level1BranchId);
+        expect(l2T1.branchId!).to.be.undefined;
 
         // Complete l2T1 normally
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "l2-t1 done" } }));
@@ -1037,10 +1042,7 @@ describe("TaskExecution", () => {
         expect(msgBus.publishedTasks).to.have.length(5);
 
         const l3T1 = msgBus.publishedTasks[4];
-        const level3BranchId = l3T1.branchId!;
-
-        expect(level3BranchId).to.not.equal(level2BranchId);
-        expect(level3BranchId).to.not.equal(level1BranchId);
+        expect(l3T1.branchId!).to.be.undefined;
 
         // Complete level 3
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "l3-t1 done" } }));
@@ -1049,59 +1051,44 @@ describe("TaskExecution", () => {
 
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after l3" } }));
         await taskExecution.do(msgBus.publishedTasks[5]);
-        expect(await mockAgentStatusTracker.areBranchesCompleted([level3BranchId])).to.be.true;
+
+        // At this point, level 3 is complete, and level 2 should be too. 
+        expect(await agenticFlowTracker.isGroupDone(cid, "level2-group")).to.be.true;
 
         // Complete level 2 group (resume l2T2's parent)
         expect(msgBus.publishedTasks).to.have.length(7); // +1 resume after level2 group
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after l2 group" } }));
         await taskExecution.do(msgBus.publishedTasks[6]);
-        expect(await mockAgentStatusTracker.areBranchesCompleted([level2BranchId])).to.be.true;
 
         // Complete level 1 group (resume l1T2's parent)
         expect(msgBus.publishedTasks).to.have.length(8); // +1 resume after level1 group
         mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "All done" } }));
         await taskExecution.do(msgBus.publishedTasks[7]);
-        expect(await mockAgentStatusTracker.areBranchesCompleted([level1BranchId])).to.be.true;
 
         // Verify flow structure
         const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
             taskId: orchestrator.taskId,
             taskInstanceId: rootTaskRequest.taskInstanceId!,
-            next: new BranchNode({
-                branches: [{
-                    branchId: level1BranchId,
-                    branch: new GroupNode({
-                        groupId: "level1-group",
-                        agents: [
-                            new AgentNode({ taskId: "task-1", taskInstanceId: l1T1.taskInstanceId! }),
-                            new AgentNode({
-                                taskId: "task-1",
-                                taskInstanceId: l1T2.taskInstanceId!,
-                                next: new BranchNode({
-                                    branches: [{
-                                        branchId: level2BranchId,
-                                        branch: new GroupNode({
-                                            groupId: "level2-group",
-                                            agents: [
-                                                new AgentNode({ taskId: "task-1", taskInstanceId: l2T1.taskInstanceId! }),
-                                                new AgentNode({
-                                                    taskId: "task-1",
-                                                    taskInstanceId: l2T2.taskInstanceId!,
-                                                    next: new BranchNode({
-                                                        branches: [{
-                                                            branchId: level3BranchId,
-                                                            branch: new AgentNode({ taskId: "task-1", taskInstanceId: l3T1.taskInstanceId! })
-                                                        }]
-                                                    })
-                                                })
-                                            ]
-                                        })
-                                    }]
+            next: new GroupNode({
+                groupId: "level1-group",
+                agents: [
+                    new AgentNode({ taskId: "task-1", taskInstanceId: l1T1.taskInstanceId! }),
+                    new AgentNode({
+                        taskId: "task-1",
+                        taskInstanceId: l1T2.taskInstanceId!,
+                        next: new GroupNode({
+                            groupId: "level2-group",
+                            agents: [
+                                new AgentNode({ taskId: "task-1", taskInstanceId: l2T1.taskInstanceId! }),
+                                new AgentNode({
+                                    taskId: "task-1",
+                                    taskInstanceId: l2T2.taskInstanceId!,
+                                    next: new AgentNode({ taskId: "task-1", taskInstanceId: l3T1.taskInstanceId! })
                                 })
-                            })
-                        ]
+                            ]
+                        })
                     })
-                }]
+                ]
             })
         }));
 
