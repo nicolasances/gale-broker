@@ -92,6 +92,8 @@ export class MockAgentStatusTracker {
     // In-memory database of task status records
     private tasks: Map<string, TaskStatusRecord> = new Map();
     private branches: Map<string, { branchId: string, parentTaskInstanceId: string, status: 'active' | 'completed', createdAt: Date, completedAt?: Date }> = new Map();
+    private locks: Map<string, Promise<void>> = new Map(); // Track active locks for preventing race conditions
+    private lockReleasers: Map<string, () => void> = new Map(); // Store release functions for locks
 
     async agentStatusStarted(task: AgentTaskRequest, agentDefinition: AgentDefinition): Promise<void> {
         const record: TaskStatusRecord = {
@@ -207,19 +209,45 @@ export class MockAgentStatusTracker {
         return Array.from(this.tasks.values());
     }
 
+    // Helper method to get all branches for debugging
+    getAllBranches(): Array<{ branchId: string, parentTaskInstanceId: string, status: 'active' | 'completed', createdAt: Date, completedAt?: Date }> {
+        return Array.from(this.branches.values());
+    }
+
     // Helper method to clear all data
     clear(): void {
         this.tasks.clear();
         this.branches.clear();
+        this.locks.clear();
+        this.lockReleasers.clear();
     }
 
     // Additional methods needed for TaskExecution tests
     async acquireTaskLock(taskInstanceId: string): Promise<void> {
-        // Mock implementation - no actual locking needed in tests
+        // Wait for any existing lock to be released
+        while (this.locks.has(taskInstanceId)) {
+            await this.locks.get(taskInstanceId);
+        }
+        
+        // Create a new lock (a promise that will be resolved when releaseTaskLock is called)
+        let releaseLock: () => void;
+        const lockPromise = new Promise<void>((resolve) => {
+            releaseLock = resolve;
+        });
+        
+        // Store both the promise and the release function
+        this.locks.set(taskInstanceId, lockPromise);
+        this.lockReleasers.set(taskInstanceId, releaseLock!);
     }
 
     async releaseTaskLock(taskInstanceId: string): Promise<void> {
-        // Mock implementation - no actual locking needed in tests
+        // Release the lock by resolving the promise
+        const releaseFn = this.lockReleasers.get(taskInstanceId);
+        if (releaseFn) {
+            releaseFn();
+            this.lockReleasers.delete(taskInstanceId);
+        }
+        this.locks.delete(taskInstanceId);
     }
 
     async findTaskByInstanceId(taskInstanceId: string): Promise<TaskStatusRecord | null> {
