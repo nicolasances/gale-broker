@@ -1,6 +1,6 @@
 
 import { Request } from "express";
-import { ExecutionContext, TotoDelegate, UserContext } from "toto-api-controller";
+import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
 
 /**
@@ -14,18 +14,41 @@ export class GetAgenticFlow implements TotoDelegate {
     async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<GetAgenticFlowResponse> {
 
         const config = execContext.config as GaleConfig;
+        const logger = execContext.logger;
+        const cid = execContext.cid;
 
-        const client = await config.getMongoClient();
-        const db = client.db(config.getDBName());
+        try {
 
-        const correlationId = req.params.correlationId;
+            const client = await config.getMongoClient();
+            const db = client.db(config.getDBName());
 
-        // Retrieve the flow from the database
-        // The flow is stored without prev references (see AgenticFlow.toBSON())
-        const flowsCollection = db.collection(config.getCollections().flows);
-        const flow = await flowsCollection.findOne({ correlationId });
+            const correlationId = req.params.correlationId;
 
-        return { flow }
+            // Validate correlationId
+            if (!correlationId) {
+                throw new ValidationError(400, "Missing correlationId parameter");
+            }
+
+            // Retrieve the flow from the database
+            // The flow is stored without prev references (see AgenticFlow.toBSON())
+            const flowsCollection = db.collection(config.getCollections().flows);
+            const flow = await flowsCollection.findOne({ correlationId });
+
+            return { flow };
+
+        } catch (error) {
+
+            logger.compute(cid, `${error}`, "error");
+
+            if (error instanceof ValidationError || error instanceof TotoRuntimeError) {
+                throw error;
+            }
+            else {
+                console.log(error);
+                throw error;
+            }
+
+        }
 
     }
 }

@@ -78,6 +78,22 @@ describe("GetAgenticFlow", () => {
         expect(response.flow).to.be.undefined;
     });
 
+    it("should throw ValidationError when correlationId is missing", async () => {
+        // Create mock request without correlationId
+        const mockRequest = {
+            params: {}
+        } as any;
+
+        // Execute the delegate and expect a validation error
+        try {
+            await delegate.do(mockRequest, {} as any, mockExecContext as any);
+            expect.fail("Expected ValidationError to be thrown");
+        } catch (error: any) {
+            expect(error.code).to.equal(400);
+            expect(error.message).to.include("Missing correlationId");
+        }
+    });
+
     it("should not include prev properties in the response", async () => {
         // Setup: Create a flow with complex structure
         const correlationId = "complex-flow-id";
