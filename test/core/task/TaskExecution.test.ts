@@ -1237,6 +1237,8 @@ describe("TaskExecution", () => {
         const agent3 = msgBus.publishedTasks[2];
         const mainBranchId = agent1.branchId!;
 
+        expect(mainBranchId).to.be.undefined;
+
         // Agent1 spawns branches
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
             correlationId: cid,
@@ -1269,6 +1271,8 @@ describe("TaskExecution", () => {
 
         const a2B1 = msgBus.publishedTasks[5];
         const agent2Branch1Id = a2B1.branchId!;
+
+        expect(agent2Branch1Id).to.be.undefined;
 
         // Agent3 completes normally
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({
@@ -1305,49 +1309,38 @@ describe("TaskExecution", () => {
         mockAgentCallFactory.setAgentResponse(a1.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "Nothing after a2-b1" } }));
         await taskExecution.do(msgBus.publishedTasks[8]);
 
-        expect(await mockAgentStatusTracker.areBranchesCompleted([agent2Branch1Id])).to.be.true;
-
         // Now the entire main group should be done, triggering orchestrator resume
         expect(msgBus.publishedTasks).to.have.length(10); // +1 resume after main group
 
         mockAgentCallFactory.setAgentResponse(orchestrator.taskId, new AgentTaskResponse({ correlationId: cid, stopReason: "completed", taskOutput: { result: "All done" } }));
         await taskExecution.do(msgBus.publishedTasks[9]);
 
-        expect(await mockAgentStatusTracker.areBranchesCompleted([mainBranchId])).to.be.true;
+        expect(msgBus.publishedTasks).to.have.length(10); // When the parent task completes, no new tasks or resumptions are published
 
         // Verify flow
         const expectedFlow = new AgenticFlow(rootTaskRequest.correlationId!, new AgentNode({
             taskId: orchestrator.taskId,
             taskInstanceId: rootTaskRequest.taskInstanceId!,
-            next: new BranchNode({
-                branches: [{
-                    branchId: mainBranchId,
-                    branch: new GroupNode({
-                        groupId: "main-group",
-                        agents: [
-                            new AgentNode({
-                                taskId: "task-1",
-                                taskInstanceId: agent1.taskInstanceId!,
-                                next: new BranchNode({
-                                    branches: [
-                                        { branchId: agent1Branch1Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a1B1.taskInstanceId! }) },
-                                        { branchId: agent1Branch2Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a1B2.taskInstanceId! }) }
-                                    ]
-                                })
-                            }),
-                            new AgentNode({
-                                taskId: "task-1",
-                                taskInstanceId: agent2.taskInstanceId!,
-                                next: new BranchNode({
-                                    branches: [
-                                        { branchId: agent2Branch1Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a2B1.taskInstanceId! }) }
-                                    ]
-                                })
-                            }),
-                            new AgentNode({ taskId: "task-1", taskInstanceId: agent3.taskInstanceId! })
-                        ]
-                    })
-                }]
+            next: new GroupNode({
+                groupId: "main-group",
+                agents: [
+                    new AgentNode({
+                        taskId: "task-1",
+                        taskInstanceId: agent1.taskInstanceId!,
+                        next: new BranchNode({
+                            branches: [
+                                { branchId: agent1Branch1Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a1B1.taskInstanceId! }) },
+                                { branchId: agent1Branch2Id, branch: new AgentNode({ taskId: "task-1", taskInstanceId: a1B2.taskInstanceId! }) }
+                            ]
+                        })
+                    }),
+                    new AgentNode({
+                        taskId: "task-1",
+                        taskInstanceId: agent2.taskInstanceId!,
+                        next: new AgentNode({ taskId: "task-1", taskInstanceId: a2B1.taskInstanceId! }) 
+                    }),
+                    new AgentNode({ taskId: "task-1", taskInstanceId: agent3.taskInstanceId! })
+                ]
             })
         }));
 

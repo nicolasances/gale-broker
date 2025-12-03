@@ -213,7 +213,7 @@ export class TaskExecution {
             // Check if all subtasks in the group are done and if so, RESUME the parent task
             const groupDone = await tracker.isGroupDone(task.correlationId!, task.taskGroupId);
 
-            if (groupDone) await this.resumeParentTask(task.taskGroupId, task.parentTask!.taskInstanceId, task.correlationId!, tracker.agentStatusTracker);
+            if (groupDone && task.parentTask) await this.resumeParentTask(task.taskGroupId, task.parentTask!.taskInstanceId, task.correlationId!, tracker.agentStatusTracker);
 
         }
 
