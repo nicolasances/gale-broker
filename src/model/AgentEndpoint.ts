@@ -1,6 +1,6 @@
 import { ValidationError } from "toto-api-controller/dist/validation/Validator";
 
-export class TaskEndpoint {
+export class AgentEndpoint {
 
     baseURL: string; // The base URL of the Task Endpoint. E.g., "https://myagents.example.com/agentA"
     executionPath: string; // The path to execute tasks. E.g., "/tasks" that will be used with a POST request. 
@@ -12,19 +12,19 @@ export class TaskEndpoint {
         this.infoPath = infoPath;
     }
 
-    static fromJSON(data: any): TaskEndpoint {
+    static fromJSON(data: any): AgentEndpoint {
 
         if (!data.baseURL) throw new ValidationError(400, `Invalid TaskEndpoint JSON: missing required fields. Received ${JSON.stringify(data)}.`);
 
-        return new TaskEndpoint(
+        return new AgentEndpoint(
             data.baseURL,
             data.executionPath,
             data.infoPath
         );
     }
 
-    static fromBSON(data: any): TaskEndpoint {
-        return new TaskEndpoint(
+    static fromBSON(data: any): AgentEndpoint {
+        return new AgentEndpoint(
             data.baseURL,
             data.executionPath,
             data.infoPath

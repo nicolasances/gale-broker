@@ -1,5 +1,5 @@
 import { ValidationError } from "toto-api-controller";
-import { TaskEndpoint } from "./TaskEndpoint";
+import { AgentEndpoint } from "./AgentEndpoint";
 import { TaskId } from "./AgentTask";
 
 export class AgentDefinition {
@@ -9,7 +9,7 @@ export class AgentDefinition {
     taskId: TaskId = ""; // The unique identifier of the type of task this Agent can execute.
     inputSchema: any = {}; 
     outputSchema: any = {}; 
-    endpoint: TaskEndpoint = new TaskEndpoint(""); // The endpoint (URL) where the Agent can be reached.
+    endpoint: AgentEndpoint = new AgentEndpoint(""); // The endpoint (URL) where the Agent can be reached.
 
     static fromJSON(data: any): AgentDefinition {
 
@@ -21,7 +21,7 @@ export class AgentDefinition {
         def.taskId = data.taskId;
         def.inputSchema = data.inputSchema;
         def.outputSchema = data.outputSchema;
-        def.endpoint = TaskEndpoint.fromJSON(data.endpoint);
+        def.endpoint = AgentEndpoint.fromJSON(data.endpoint);
 
         return def;
     }

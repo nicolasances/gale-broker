@@ -2,7 +2,7 @@
 import { Request } from "express";
 import { ExecutionContext, TotoDelegate, UserContext } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
-import { TaskStatusRecord, TaskTracker } from "../../core/tracking/TaskTracker";
+import { TaskStatusRecord, AgentStatusTracker } from "../../core/tracking/AgentStatusTracker";
 
 /**
  * This endpoint retrieves all the root tasks
@@ -17,7 +17,7 @@ export class GetRootTasks implements TotoDelegate {
         const db = client.db(config.getDBName());
 
         // 1. Retrieve the exeuction records from the database
-        const tasks = await new TaskTracker(db, execContext).findAllRoots();
+        const tasks = await new AgentStatusTracker(db, execContext).findAllRoots();
 
         return { tasks }
 
