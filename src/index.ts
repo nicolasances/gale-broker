@@ -13,6 +13,7 @@ import { GetAgents } from "./dlg/catalog/GetAgents";
 import { DeleteAgent } from "./dlg/catalog/DeleteAgent";
 import { GetRootTasks } from "./dlg/tracking/GetRootTasks";
 import { GetAgent } from "./dlg/catalog/GetAgent";
+import { GetAgenticFlow } from "./dlg/tracking/GetAgenticFlow";
 
 export const APINAME = "gale-broker";
 
@@ -54,6 +55,9 @@ api.path('POST', '/tasks', new PostTask());
 api.path('GET', '/tasks', new GetRootTasks())
 
 api.path('GET', '/tasks/:correlationId/graph', new GetTaskExecutionGraph());
+
+// Endpoints related to Agentic Flows
+api.path('GET', '/flows/:correlationId', new GetAgenticFlow());
 
 // Endpoints for async events (push pubsub-like brokers)
 api.path('POST', '/events/agent', new OnAgentEvent()); 
