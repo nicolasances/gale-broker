@@ -32,6 +32,7 @@ export class GetAgenticFlow implements TotoDelegate {
             // Retrieve the flow from the database
             // The flow is stored without prev references (see AgenticFlow.toBSON())
             const flowsCollection = db.collection(config.getCollections().flows);
+            
             const flow = await flowsCollection.findOne({ correlationId });
 
             return { flow };
