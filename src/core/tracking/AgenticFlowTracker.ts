@@ -52,7 +52,8 @@ export class AgenticFlowTracker {
     }
 
     async getFlow(correlationId: string): Promise<AgenticFlow | null> {
-        return this.flowsCollection.findOne({ correlationId }) as Promise<AgenticFlow | null>;
+        const bson = await this.flowsCollection.findOne({ correlationId });
+        return bson ? AgenticFlow.fromBSON(bson) : null;
     }
 
     /**
@@ -156,7 +157,8 @@ export class AgenticFlowTracker {
         try {
 
             // 2.2. Load the flow, update it, and save it back
-            const flow = await this.flowsCollection.findOne({ correlationId: correlationId }) as AgenticFlow;
+            const bson = await this.flowsCollection.findOne({ correlationId: correlationId });
+            const flow = AgenticFlow.fromBSON(bson);
 
             flow.branch(after, branches);
 
@@ -196,7 +198,8 @@ export class AgenticFlowTracker {
         try {
 
             // 2.2. Load the flow, update it, and save it back
-            const flow = await this.flowsCollection.findOne({ correlationId: correlationId }) as AgenticFlow;
+            const bson = await this.flowsCollection.findOne({ correlationId: correlationId });
+            const flow = AgenticFlow.fromBSON(bson);
 
             flow.append(after, tasks);
 
@@ -241,7 +244,8 @@ export class AgenticFlowTracker {
 
         // 2. Mark the parent branch as completed if all its branches are completed
         // 2.1. Load the flow
-        const flow = await this.flowsCollection.findOne({ correlationId }) as AgenticFlow;
+        const bson = await this.flowsCollection.findOne({ correlationId });
+        const flow = AgenticFlow.fromBSON(bson);
 
         // 2.2. Check if all branches are completed
         const siblingBranches = flow.siblingBranches(branchId);
@@ -265,7 +269,8 @@ export class AgenticFlowTracker {
     async areSiblingBranchesCompleted(correlationId: string, branchId: string): Promise<boolean> {
 
         // 1. Load the flow
-        const flow = await this.flowsCollection.findOne({ correlationId }) as AgenticFlow;
+        const bson = await this.flowsCollection.findOne({ correlationId });
+        const flow = AgenticFlow.fromBSON(bson);
 
         // 2. Get sibling branches
         const siblingBranches = flow.siblingBranches(branchId);
