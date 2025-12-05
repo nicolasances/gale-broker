@@ -102,14 +102,20 @@ export class TaskExecution {
 
                 // Handle the response 
                 if (agentTaskResponse.stopReason === 'failed') {
+                    logger.compute(cid, `[AGENT FAILED] - [${task.taskId} - ${task.taskInstanceId}] - Agent FAILED - Correlation Id: ${task.correlationId}`, "info");
+
                     await tracker.agentFailed(task, agentTaskResponse);
 
                     // TODO: resume the parent task with failure info - or retry automatically once before resuming the parent
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
+                    logger.compute(cid, `[AGENT COMPLETED] - [${task.taskId} - ${task.taskInstanceId}] - Agent returned COMPLETED - Correlation Id: ${task.correlationId}`, "info");
+
                     return this.markAgentCompleted(task, agentTaskResponse, tracker);
                 }
                 else if (agentTaskResponse.stopReason === 'subtasks') {
+                    logger.compute(cid, `[AGENT SUBTASKS] - [${task.taskId} - ${task.taskInstanceId}] - Agent returned SUBTASKS: [${JSON.stringify(agentTaskResponse.subtasks?.map(subtask => subtask.groupId))}] - Correlation Id: ${task.correlationId}`, "info");
+
                     await this.spawnSubtasks(agentTaskResponse.subtasks!, {
                         taskId: task.taskId,
                         taskInstanceId: task.taskInstanceId!,
@@ -132,12 +138,15 @@ export class TaskExecution {
                 const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
 
                 if (agentTaskResponse.stopReason === 'failed') {
+                    logger.compute(cid, `[AGENT FAILED] - [${task.taskId} - ${task.taskInstanceId}] - Parent Resumed and FAILED - Correlation Id: ${task.correlationId}`, "info");
+
                     await tracker.agentFailed(task, agentTaskResponse);
 
                     // TODO If this parent task had a parent itself, notify the parent  - or retry automatically once before resuming the parent
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
                     // The parent agent is saying it's done with this branch
+                    logger.compute(cid, `[AGENT COMPLETED] - [${task.taskId} - ${task.taskInstanceId}] - Parent Resumed and answered COMPLETED - Correlation Id: ${task.correlationId}`, "info");
 
                     if (branchId) {
                         // Mark the branch as completed
@@ -158,6 +167,8 @@ export class TaskExecution {
                     return agentTaskResponse;
                 }
                 else if (agentTaskResponse.stopReason === 'subtasks') {
+                    logger.compute(cid, `[AGENT SUBTASKS] - [${task.taskId} - ${task.taskInstanceId}] - Parent Resumed and returned SUBTASKS - Correlation Id: ${task.correlationId}`, "info");
+
                     // This means that the parent agent has more work to do on this branch
 
                     await this.spawnSubtasks(agentTaskResponse.subtasks!, {
@@ -213,7 +224,11 @@ export class TaskExecution {
             // Check if all subtasks in the group are done and if so, RESUME the parent task
             const groupDone = await tracker.isGroupDone(task.correlationId!, task.taskGroupId);
 
-            if (groupDone && task.parentTask) await this.resumeParentTask(task.taskGroupId, task.parentTask!.taskInstanceId, task.correlationId!, tracker.agentStatusTracker);
+            if (groupDone && task.parentTask) {
+                this.execContext.logger.compute(this.cid, `[GROUP COMPLETED] - [${task.taskId} - ${task.taskInstanceId}] - Group ${task.taskGroupId} - Correlation Id: ${task.correlationId}`, "info");
+
+                await this.resumeParentTask(task.taskGroupId, task.parentTask!.taskInstanceId, task.correlationId!, tracker.agentStatusTracker);
+            }
 
         }
 
@@ -330,36 +345,40 @@ export class TaskExecution {
 
             branches.push({ branchId: newBranchId || "NA", tasks: groupTasks });
 
-            // Publish each subtask to the bus
-            for (const task of groupTasks) {
+        }
 
+        // Track - only create branches if there is more than 1 branch
+        // This is done before to avoid race conditions where a subtask could complete before the branch is created in the tracker
+        if (branches.length > 1) await tracker.branch(branches, after);
+        else await tracker.append(branches[0].tasks, after);
+
+        // Publish each subtask to the bus
+        for (const b of branches) {
+            for (const task of b.tasks) {
+    
                 // Publish the subtask to the message bus
                 publishPromises.push(new Promise<void>(async (resolve, reject) => {
-
+    
                     try {
-
+    
                         // 1. Publish the task to the bus
                         await bus.publishTask(task, this.cid);
-
+    
                         this.execContext.logger.compute(this.cid, `Subtask [${task.taskId}] successfully spawned.`, "info");
-
+    
                         resolve();
-
+    
                     } catch (error) {
                         this.execContext.logger.compute(this.cid, `Failed to spawn subtask [${task.taskId}]: ${error}`, "error");
                         reject(error);
                     }
-
+    
                 }));
             }
         }
 
         // Wait for all to be published
         await Promise.all(publishPromises);
-
-        // Track - only create branches if there is more than 1 branch
-        if (branches.length > 1) await tracker.branch(branches, after);
-        else await tracker.append(branches[0].tasks, after);
     }
 
 }

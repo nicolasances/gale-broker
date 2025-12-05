@@ -81,7 +81,7 @@ export class AgentStatusTracker {
      */
     async agentStatusCompleted(taskInstanceId: string, agentTaskResponse: AgentTaskResponse): Promise<void> {
 
-        await this.tasksCollection.updateOne({ taskInstanceId }, {
+        const result = await this.tasksCollection.updateOne({ taskInstanceId }, {
             $set: {
                 status: "completed",
                 stoppedAt: new Date(Date.now()),
