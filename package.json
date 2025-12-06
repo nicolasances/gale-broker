@@ -4,7 +4,7 @@
   "description": "Gale Broker is the service that acts as a bridge between Gale Agents",
   "main": "index.js",
   "scripts": {
-    "start:dev": "npx nodemon",
+    "dev": "npx nodemon",
     "build": "rm -rf ./build && tsc",
     "start": "node build/index.js",
     "test": "mocha --require ts-node/register --project tsconfig.test.json test/**/*.test.ts"

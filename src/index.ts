@@ -6,7 +6,6 @@ import { UpdateAgent } from "./dlg/catalog/PutAgent";
 import { PubSubMessageBus } from "./bus/impl/google/PubSub";
 import { OnAgentEvent } from "./evt/dlg/OnAgentEvent";
 import { DevQMessageBus } from "./bus/impl/google/DevQ";
-import { GetTaskExecutionGraph } from "./dlg/tracking/GetTasksTracking";
 import { SQSMessageBus } from "./bus/impl/aws/SQS";
 import { IMessageBus, MessageBusFactory } from "./bus/MessageBus";
 import { GetAgents } from "./dlg/catalog/GetAgents";
@@ -53,8 +52,6 @@ api.path('GET', '/catalog/agents/:taskId', new GetAgent());
 // Endpoints related to Agent Executions
 api.path('POST', '/tasks', new PostTask());
 api.path('GET', '/tasks', new GetRootTasks())
-
-api.path('GET', '/tasks/:correlationId/graph', new GetTaskExecutionGraph());
 
 // Endpoints related to Agentic Flows
 api.path('GET', '/flows/:correlationId', new GetAgenticFlow());
