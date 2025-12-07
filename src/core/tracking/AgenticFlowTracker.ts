@@ -112,7 +112,7 @@ export class AgenticFlowTracker {
             const bson = await this.flowsCollection.findOne({ correlationId: task.correlationId });
             const flow = AgenticFlow.fromBSON(bson);
 
-            flow.setAgentStatus(task.taskInstanceId!, "started");
+            flow.updateAgent(task.taskInstanceId!, "started", agent.name);
 
             await this.flowsCollection.updateOne( { correlationId: task.correlationId }, { $set: { root: flow.root } } );
 
@@ -147,7 +147,7 @@ export class AgenticFlowTracker {
             const bson = await this.flowsCollection.findOne({ correlationId: task.correlationId });
             const flow = AgenticFlow.fromBSON(bson);
 
-            flow.setAgentStatus(task.taskInstanceId!, "completed");
+            flow.updateAgent(task.taskInstanceId!, "completed");
 
             await this.flowsCollection.updateOne( { correlationId: task.correlationId }, { $set: { root: flow.root } } );
 
@@ -182,7 +182,7 @@ export class AgenticFlowTracker {
             const bson = await this.flowsCollection.findOne({ correlationId: task.correlationId });
             const flow = AgenticFlow.fromBSON(bson);
 
-            flow.setAgentStatus(task.taskInstanceId!, "failed");
+            flow.updateAgent(task.taskInstanceId!, "failed");
 
             await this.flowsCollection.updateOne( { correlationId: task.correlationId }, { $set: { root: flow.root } } );
 

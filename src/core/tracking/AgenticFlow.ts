@@ -188,10 +188,13 @@ export class AgenticFlow {
 
     }
 
-    setAgentStatus(taskInstanceId: string, status: "started" | "completed" | "failed"): void {
+    updateAgent(taskInstanceId: string, status: "started" | "completed" | "failed", name?: string): void {
         const agentNode = this.root.findAgentNode(taskInstanceId);
+
         if (!agentNode) throw new TotoRuntimeError(500, `[Agentic Flow]: Could not find agent node with taskInstanceId ${taskInstanceId} to set status.`);
+
         agentNode.status = status;
+        if (name) agentNode.name = name;
     }
 }
 
@@ -203,7 +206,7 @@ export class AgenticFlow {
  */
 export abstract class AbstractNode {
     protected type: "agent" | "group" | "branch" = "agent";
-    protected name: string | null = null;
+    public name: string | null = null;
     protected next: AbstractNode | null = null;
     protected prev: AbstractNode | null = null;
 
