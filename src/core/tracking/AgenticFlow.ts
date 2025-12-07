@@ -40,6 +40,7 @@ export class AgenticFlow {
                 taskId: bson.taskId,
                 taskInstanceId: bson.taskInstanceId,
                 name: bson.name || undefined,
+                status: bson.status || "started",
             });
 
             node.setNext(bson.next ? AgenticFlow.parseNodeFromBSON(bson.next) : null);
@@ -110,11 +111,11 @@ export class AgenticFlow {
         parentNode.setNext(new BranchNode({
             branches: branches.map(branch => {
 
-                if (branch.tasks.length === 1) return { branchId: branch.branchId, branch: new AgentNode({ taskId: branch.tasks[0].taskId, taskInstanceId: branch.tasks[0].taskInstanceId! }) };
+                if (branch.tasks.length === 1) return { branchId: branch.branchId, branch: new AgentNode({ taskId: branch.tasks[0].taskId, taskInstanceId: branch.tasks[0].taskInstanceId!, status: "started" }) };
 
                 return {
                     branchId: branch.branchId, branch: new GroupNode({
-                        agents: branch.tasks.map(task => new AgentNode({ taskId: task.taskId, taskInstanceId: task.taskInstanceId! })),
+                        agents: branch.tasks.map(task => new AgentNode({ taskId: task.taskId, taskInstanceId: task.taskInstanceId!, status: "started" })),
                         groupId: branch.tasks[0].taskGroupId!,
                         // name: branch.tasks[0].taskGroupId
                     })
@@ -137,10 +138,10 @@ export class AgenticFlow {
             else if (after.object === "group") parentNode = this.root.findGroupNode(after.objectId) as AbstractNode;
         }
 
-        if (tasks.length === 1) parentNode.setNext(new AgentNode({ taskId: tasks[0].taskId, taskInstanceId: tasks[0].taskInstanceId! }));
+        if (tasks.length === 1) parentNode.setNext(new AgentNode({ taskId: tasks[0].taskId, taskInstanceId: tasks[0].taskInstanceId!, status: "started" }));
         else {
             parentNode.setNext(new GroupNode({
-                agents: tasks.map(task => new AgentNode({ taskId: task.taskId, taskInstanceId: task.taskInstanceId! })),
+                agents: tasks.map(task => new AgentNode({ taskId: task.taskId, taskInstanceId: task.taskInstanceId!, status: "started" })),
                 groupId: tasks[0].taskGroupId!,
             }));
         }
@@ -185,6 +186,12 @@ export class AgenticFlow {
 
         return null;
 
+    }
+
+    setAgentStatus(taskInstanceId: string, status: "started" | "completed" | "failed"): void {
+        const agentNode = this.root.findAgentNode(taskInstanceId);
+        if (!agentNode) throw new TotoRuntimeError(500, `[Agentic Flow]: Could not find agent node with taskInstanceId ${taskInstanceId} to set status.`);
+        agentNode.status = status;
     }
 }
 
@@ -241,13 +248,15 @@ export class AgentNode extends AbstractNode {
 
     taskId: string;
     taskInstanceId: string;
+    status: "started" | "completed" | "failed";
 
-    constructor({ taskId, taskInstanceId, name, next }: { taskId: string, taskInstanceId: string, name?: string, next?: AbstractNode }) {
+    constructor({ taskId, taskInstanceId, name, status, next }: { taskId: string, taskInstanceId: string, name?: string, status: "started" | "completed" | "failed", next?: AbstractNode }) {
         super();
 
         this.taskId = taskId;
         this.taskInstanceId = taskInstanceId;
         this.type = "agent";
+        this.status = status;
         if (name) this.name = name;
         if (next) this.next = next;
     }
@@ -275,6 +284,7 @@ export class AgentNode extends AbstractNode {
             taskInstanceId: this.taskInstanceId,
             type: this.type,
             name: this.name,
+            status: this.status,
             next: this.next ? this.next.toBSON() : null
         }
     }
