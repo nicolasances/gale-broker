@@ -6,7 +6,9 @@ import { AgenticFlow, AgentNode } from "./AgenticFlow";
 import { GaleConfig } from "../../Config";
 import { AgentDefinition } from "../../model/AgentDefinition";
 
-const MAX_LOCK_ATTEMPTS = 10;
+const MAX_LOCK_ATTEMPTS = 20;
+const LOCK_MIN_WAIT_TIME = 50;
+const LOCK_WAIT_TIME = 400;
 
 /**
  * Facade for tracking both: 
@@ -38,7 +40,7 @@ export class AgenticFlowTracker {
 
         if (updateResult.matchedCount === 0) {
             // Means it's already locked: wait and retry
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise(resolve => setTimeout(resolve, LOCK_MIN_WAIT_TIME + Math.random() * (LOCK_WAIT_TIME - LOCK_MIN_WAIT_TIME)));
             return this.lockFlow(correlationId, attempt + 1);
         }
     }
@@ -78,6 +80,7 @@ export class AgenticFlowTracker {
                 taskId: task.taskId,
                 taskInstanceId: task.taskInstanceId,
                 name: agent.name,
+                status: "started"
             })
         )
 
@@ -100,7 +103,26 @@ export class AgenticFlowTracker {
         // 1. Update the agent status
         await this.agentStatusTracker.agentStatusStarted(task, agent);
 
-        // No need to update the flow structure as if this is necessarily a subtask, so it is already represented in the flow.
+        // 2. Update the flow status
+        await this.lockFlow(task.correlationId!);
+
+        try {
+
+            // 2.2. Load the flow, update it, and save it back
+            const bson = await this.flowsCollection.findOne({ correlationId: task.correlationId });
+            const flow = AgenticFlow.fromBSON(bson);
+
+            flow.setAgentStatus(task.taskInstanceId!, "started");
+
+            await this.flowsCollection.updateOne( { correlationId: task.correlationId }, { $set: { root: flow.root } } );
+
+        } catch (error) {
+            throw error;
+        }
+        finally {
+            // Release the lock
+            await this.releaseFlowLock(task.correlationId!);
+        }
 
     }
 
@@ -116,6 +138,27 @@ export class AgenticFlowTracker {
         // 1. Update the agent status
         await this.agentStatusTracker.agentStatusCompleted(task.taskInstanceId!, agentTaskResponse);
 
+        // 2. Update the flow
+        await this.lockFlow(task.correlationId!);
+
+        try {
+
+            // 2.2. Load the flow, update it, and save it back
+            const bson = await this.flowsCollection.findOne({ correlationId: task.correlationId });
+            const flow = AgenticFlow.fromBSON(bson);
+
+            flow.setAgentStatus(task.taskInstanceId!, "completed");
+
+            await this.flowsCollection.updateOne( { correlationId: task.correlationId }, { $set: { root: flow.root } } );
+
+        } catch (error) {
+            throw error;
+        }
+        finally {
+            // Release the lock
+            await this.releaseFlowLock(task.correlationId!);
+        }
+
     }
 
     /**
@@ -129,6 +172,27 @@ export class AgenticFlowTracker {
 
         // 1. Update the agent status
         await this.agentStatusTracker.agentStatusFailed(task.taskInstanceId!, agentTaskResponse);
+
+        // 2. Update the flow
+        await this.lockFlow(task.correlationId!);
+
+        try {
+
+            // 2.2. Load the flow, update it, and save it back
+            const bson = await this.flowsCollection.findOne({ correlationId: task.correlationId });
+            const flow = AgenticFlow.fromBSON(bson);
+
+            flow.setAgentStatus(task.taskInstanceId!, "failed");
+
+            await this.flowsCollection.updateOne( { correlationId: task.correlationId }, { $set: { root: flow.root } } );
+
+        } catch (error) {
+            throw error;
+        }
+        finally {
+            // Release the lock
+            await this.releaseFlowLock(task.correlationId!);
+        }
 
     }
 
