@@ -8,9 +8,9 @@ export interface AgentCallFactory {
 }
 
 export class DefaultAgentCallFactory implements AgentCallFactory {
-    
+
     constructor(private execContext: ExecutionContext, private bearerToken?: string) { }
-    
+
     createAgentCall(agentDefinition: AgentDefinition): AgentCall {
         return new AgentCall(agentDefinition, this.execContext, this.bearerToken);
     }
@@ -57,6 +57,14 @@ export class AgentCall {
                     console.log(err)
                     failure(err);
                     return;
+                }
+
+                if (resp.statusCode != 200) {
+                    success(new AgentTaskResponse({
+                        correlationId: task.correlationId!,
+                        stopReason: "failed",
+                        taskOutput: { error: `Agent responded with status code ${resp.statusCode}: ${body}` },
+                    }));
                 }
 
                 // Parse the output
