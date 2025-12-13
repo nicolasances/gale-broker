@@ -4,6 +4,7 @@ import { TaskId } from "./AgentTask";
 
 export class AgentDefinition {
 
+    id?: string;
     name: string = ""; // The name of the Agent.
     description: string = ""; // The description of the Agent.
     taskId: TaskId = ""; // The unique identifier of the type of task this Agent can execute.
@@ -27,6 +28,8 @@ export class AgentDefinition {
     }
 
     static fromBSON(data: any): AgentDefinition {
-        return AgentDefinition.fromJSON(data);
+        const agent = AgentDefinition.fromJSON(data);
+        agent.id = data._id?.toString();
+        return agent;
     }
 }

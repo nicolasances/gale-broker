@@ -13,6 +13,7 @@ import { DeleteAgent } from "./dlg/catalog/DeleteAgent";
 import { GetRootTasks } from "./dlg/tracking/GetRootTasks";
 import { GetAgent } from "./dlg/catalog/GetAgent";
 import { GetAgenticFlow } from "./dlg/tracking/GetAgenticFlow";
+import { GetAgentExecutionRecord } from "./dlg/tracking/GetAgentExecutionRecord";
 
 export const APINAME = "gale-broker";
 
@@ -52,6 +53,7 @@ api.path('GET', '/catalog/agents/:taskId', new GetAgent());
 // Endpoints related to Agent Executions
 api.path('POST', '/tasks', new PostTask());
 api.path('GET', '/tasks', new GetRootTasks())
+api.path('GET', '/tasks/:taskInstanceId', new GetAgentExecutionRecord());
 
 // Endpoints related to Agentic Flows
 api.path('GET', '/flows/:correlationId', new GetAgenticFlow());
