@@ -1,13 +1,16 @@
 import { AgentsCatalog } from "../catalog/AgentsCatalog";
 import { AgentNotFoundError } from "../../model/error/AgentNotFoundError";
 import { AgentCallFactory } from "../../api/AgentCall";
-import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
+import { ExecutionContext, Logger, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
 import { AgentTaskRequest, AgentTaskResponse, ParentTaskInfo, TaskGroup } from "../../model/AgentTask";
 import { v4 as uuidv4 } from "uuid";
 import { isRootTaskFirstStart, isParentTaskResumption, isSubtaskStart } from "./TaskExecutionUtil";
 import { AgentStatusTracker } from "../tracking/AgentStatusTracker";
 import { AgenticFlowTracker } from "../tracking/AgenticFlowTracker";
+import { AgentDefinition } from "../../model/AgentDefinition";
+
+const MAX_AGENT_CALL_RETRIES = 1;
 
 /**
  * This class is responsible for executing tasks, by finding suitable Agents and delegating the execution to them.
@@ -23,6 +26,7 @@ export class TaskExecution {
 
     execContext: ExecutionContext;
     config: GaleConfig;
+    logger: Logger;
     cid: string;
     agentCallFactory: AgentCallFactory;
     agenticFlowTracker: AgenticFlowTracker;
@@ -36,6 +40,7 @@ export class TaskExecution {
 
         this.config = execContext.config as GaleConfig;
         this.cid = execContext.cid ?? "";
+        this.logger = execContext.logger;
     }
 
     /**
@@ -66,7 +71,7 @@ export class TaskExecution {
                 await tracker.rootAgentStarted(agent, task);
 
                 // Trigger the agent (orchestrator, most likely)
-                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId);
+                const agentTaskResponse: AgentTaskResponse = await this.callAgent(agent, task);
 
                 // Response handling
                 // If you're done, just return: it wasn't an orchestrator flow after all
@@ -98,7 +103,7 @@ export class TaskExecution {
 
                 await tracker.agentStarted(agent, task);
 
-                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
+                const agentTaskResponse: AgentTaskResponse = await this.callAgent(agent, task);
 
                 // Handle the response 
                 if (agentTaskResponse.stopReason === 'failed') {
@@ -135,14 +140,12 @@ export class TaskExecution {
                 if (!completedGroupId) throw new ValidationError(400, "Missing completedTaskGroupId in command to resume parent task. Task Id: " + task.taskId);
 
                 // Resume the parent <=> ask if there is more to do on the branch or not
-                const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
+                const agentTaskResponse: AgentTaskResponse = await this.callAgent(agent, task);
 
                 if (agentTaskResponse.stopReason === 'failed') {
                     logger.compute(cid, `[AGENT FAILED] - [${task.taskId} - ${task.taskInstanceId}] - Parent Resumed and FAILED - Correlation Id: ${task.correlationId}`, "info");
 
                     await tracker.agentFailed(task, agentTaskResponse);
-
-                    // TODO If this parent task had a parent itself, notify the parent  - or retry automatically once before resuming the parent
                 }
                 else if (agentTaskResponse.stopReason === 'completed') {
                     // The parent agent is saying it's done with this branch
@@ -204,6 +207,29 @@ export class TaskExecution {
 
         }
 
+    }
+
+    /**
+     * Calls the specified agent with the given task and correlation Id.
+     * 
+     * If the agent call fails, this method will retry the call a predefined number of times before throwing an error.
+     * 
+     * @param agent the agent to call
+     * @param task the task to send to the agent
+     */
+    private async callAgent(agent: AgentDefinition, task: AgentTaskRequest, attempts = 0): Promise<AgentTaskResponse> {
+
+        const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
+
+        if (agentTaskResponse.stopReason == 'failed' && attempts <= MAX_AGENT_CALL_RETRIES) {
+
+            this.logger.compute(this.cid, `[AGENT FAILED - RETRYING] - [${task.taskId} - ${task.taskInstanceId}] - Correlation Id: ${task.correlationId}`, "info");
+
+            // Retry 
+            return this.callAgent(agent, task, attempts + 1);
+        }
+
+        return agentTaskResponse;
     }
 
     /**
@@ -355,24 +381,24 @@ export class TaskExecution {
         // Publish each subtask to the bus
         for (const b of branches) {
             for (const task of b.tasks) {
-    
+
                 // Publish the subtask to the message bus
                 publishPromises.push(new Promise<void>(async (resolve, reject) => {
-    
+
                     try {
-    
+
                         // 1. Publish the task to the bus
                         await bus.publishTask(task, this.cid);
-    
+
                         this.execContext.logger.compute(this.cid, `Subtask [${task.taskId}] successfully spawned.`, "info");
-    
+
                         resolve();
-    
+
                     } catch (error) {
                         this.execContext.logger.compute(this.cid, `Failed to spawn subtask [${task.taskId}]: ${error}`, "error");
                         reject(error);
                     }
-    
+
                 }));
             }
         }
