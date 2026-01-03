@@ -98,15 +98,24 @@ export class AgentsCatalog {
      */
     async updateAgent(agentDefinition: AgentDefinition): Promise<number> {
 
-        const agentsCollection = this.db.collection(this.config.getCollections().agents);
+        try {
 
-        const result = await agentsCollection.updateOne(
-            { taskId: agentDefinition.taskId },
-            { $set: { ...agentDefinition } },
-            { upsert: true }
-        );
+            const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
-        return result.modifiedCount;
+            const result = await agentsCollection.updateOne(
+                { taskId: agentDefinition.taskId },
+                { $set: { ...agentDefinition } },
+                { upsert: true }
+            );
+
+            return result.modifiedCount;
+
+        } catch (error) {
+
+            console.log(JSON.stringify(agentDefinition, null, 2));
+
+            throw error;
+        }
 
     }
 }
