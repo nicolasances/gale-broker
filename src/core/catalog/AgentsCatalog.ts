@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { ExecutionContext, ValidationError } from "toto-api-controller";
+import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
 import { TaskId } from "../../model/AgentTask";
 
@@ -120,7 +120,7 @@ export class AgentsCatalog {
 
             console.log(JSON.stringify(agentDefinition, null, 2));
 
-            throw error;
+            throw new TotoRuntimeError(500, `Error updating agent definition for agent with taskId ${agentDefinition.taskId}: ${error}`);
         }
 
     }
