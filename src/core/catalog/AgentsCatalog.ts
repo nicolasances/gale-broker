@@ -86,7 +86,10 @@ export class AgentsCatalog {
 
         if (existing) throw new ValidationError(400, `Agent with name ${agentDefinition.name} or taskId ${agentDefinition.taskId} already exists.`);
 
-        const result = await agentsCollection.insertOne(agentDefinition);
+        // Strip the agent definition of anything containing "$"
+        const cleanAgentDefinition = stripDollarProps(agentDefinition);
+
+        const result = await agentsCollection.insertOne(cleanAgentDefinition);
 
         return result.insertedId.toHexString();
     }
@@ -100,11 +103,14 @@ export class AgentsCatalog {
 
         try {
 
+            // Strip the agent definition of anything containing "$"
+            const cleanAgentDefinition = stripDollarProps(agentDefinition);
+
             const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
             const result = await agentsCollection.updateOne(
                 { taskId: agentDefinition.taskId },
-                { $set: { ...agentDefinition } },
+                { $set: { ...cleanAgentDefinition } },
                 { upsert: true }
             );
 
@@ -119,3 +125,8 @@ export class AgentsCatalog {
 
     }
 }
+
+const stripDollarProps = (schema: any) => {
+    const { $schema, ...rest } = schema;
+    return rest;
+};
