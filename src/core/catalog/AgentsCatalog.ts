@@ -126,7 +126,15 @@ export class AgentsCatalog {
     }
 }
 
-const stripDollarProps = (schema: any) => {
-    const { $schema, ...rest } = schema;
-    return rest;
+const stripDollarProps = (obj: any): any => {
+
+    if (typeof obj !== 'object' || obj === null) return obj;
+    
+    if (Array.isArray(obj)) return obj.map(stripDollarProps);
+
+    return Object.fromEntries(
+        Object.entries(obj)
+            .filter(([key]) => !key.startsWith('$'))
+            .map(([key, value]) => [key, stripDollarProps(value)])
+    );
 };
