@@ -30,6 +30,8 @@ export class GaleConfig extends TotoControllerConfig {
 
         super({ apiName: options.apiName }, totoControllerOptions);
 
+        this.logger = new Logger("gale-broker");
+
         // Initialize the message bus
         this.messageBus = new GaleMessageBus(options.messageBusFactory, this);
 

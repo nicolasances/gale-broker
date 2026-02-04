@@ -23,13 +23,17 @@ class GaleMessageBusFactory extends MessageBusFactory {
 
         // Override to be able to run Gale Broker locally using a local message bus (DevQ)
         if (process.env['LOCAL_DEVQ_ENDPOINT'] == 'devq') {
+            config.logger?.compute("INIT", "Using local DevQ as Message Bus for Gale Broker");
+
             return new DevQMessageBus(process.env['LOCAL_DEVQ_ENDPOINT'], config);
         }
 
         switch (config.hyperscaler) {
             case "aws":
+                config.logger?.compute("INIT", "Using AWS SQS as Message Bus for Gale Broker");
                 return new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")
             case "gcp":
+                config.logger?.compute("INIT", "Using Google Pub/Sub as Message Bus for Gale Broker");
                 return new PubSubMessageBus();
             default:
                 throw new Error(`Unsupported hyperscaler: ${config.hyperscaler}`);
