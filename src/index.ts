@@ -20,13 +20,17 @@ export const APINAME = "gale-broker";
 class GaleMessageBusFactory extends MessageBusFactory {
 
     createMessageBus(config: TotoControllerConfig): IMessageBus {
+
+        // Override to be able to run Gale Broker locally using a local message bus (DevQ)
+        if (process.env['LOCAL_DEVQ_ENDPOINT'] == 'devq') {
+            return new DevQMessageBus(process.env['LOCAL_DEVQ_ENDPOINT'], config);
+        }
+
         switch (config.hyperscaler) {
             case "aws":
                 return new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")
             case "gcp":
                 return new PubSubMessageBus();
-            case "local":
-                return new DevQMessageBus("http://localhost:8000/msg", config);
             default:
                 throw new Error(`Unsupported hyperscaler: ${config.hyperscaler}`);
         }
@@ -41,7 +45,7 @@ export const galeConfig = new GaleConfig({
     defaultSecretsManagerLocation: "aws"
 });
 
-const api = new TotoAPIController(galeConfig, { basePath: '/galebroker', port: process.env.HYPERSCALER == 'local' ? 8081 : 8080 });
+const api = new TotoAPIController(galeConfig, { basePath: '/galebroker', port: process.env.GALE_BROKER_PORT ? parseInt(process.env.GALE_BROKER_PORT) : 8080 });
 
 // Endpoints related to Agent Catalog
 api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.
