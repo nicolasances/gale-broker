@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { ExecutionContext, ValidationError } from "toto-api-controller";
+import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
 import { GaleConfig } from "../../Config";
 import { TaskId } from "../../model/AgentTask";
 
@@ -86,7 +86,10 @@ export class AgentsCatalog {
 
         if (existing) throw new ValidationError(400, `Agent with name ${agentDefinition.name} or taskId ${agentDefinition.taskId} already exists.`);
 
-        const result = await agentsCollection.insertOne(agentDefinition);
+        // Strip the agent definition of anything containing "$"
+        const cleanAgentDefinition = stripDollarProps(agentDefinition);
+
+        const result = await agentsCollection.insertOne(cleanAgentDefinition);
 
         return result.insertedId.toHexString();
     }
@@ -98,15 +101,40 @@ export class AgentsCatalog {
      */
     async updateAgent(agentDefinition: AgentDefinition): Promise<number> {
 
-        const agentsCollection = this.db.collection(this.config.getCollections().agents);
+        try {
 
-        const result = await agentsCollection.updateOne(
-            { taskId: agentDefinition.taskId },
-            { $set: { ...agentDefinition } },
-            { upsert: true }
-        );
+            // Strip the agent definition of anything containing "$"
+            const cleanAgentDefinition = stripDollarProps(agentDefinition);
 
-        return result.modifiedCount;
+            const agentsCollection = this.db.collection(this.config.getCollections().agents);
+
+            const result = await agentsCollection.updateOne(
+                { taskId: agentDefinition.taskId },
+                { $set: { ...cleanAgentDefinition } },
+                { upsert: true }
+            );
+
+            return result.modifiedCount;
+
+        } catch (error) {
+
+            console.log(JSON.stringify(agentDefinition, null, 2));
+
+            throw new TotoRuntimeError(500, `Error updating agent definition for agent with taskId ${agentDefinition.taskId}: ${error}`);
+        }
 
     }
 }
+
+const stripDollarProps = (obj: any): any => {
+
+    if (typeof obj !== 'object' || obj === null) return obj;
+    
+    if (Array.isArray(obj)) return obj.map(stripDollarProps);
+
+    return Object.fromEntries(
+        Object.entries(obj)
+            .filter(([key]) => !key.startsWith('$'))
+            .map(([key, value]) => [key, stripDollarProps(value)])
+    );
+};
