@@ -22,7 +22,7 @@ class GaleMessageBusFactory extends MessageBusFactory {
     createMessageBus(config: TotoControllerConfig): IMessageBus {
 
         // Override to be able to run Gale Broker locally using a local message bus (DevQ)
-        if (process.env['LOCAL_DEVQ_ENDPOINT'] == 'devq') {
+        if (process.env['LOCAL_DEVQ_ENDPOINT']) {
             config.logger?.compute("INIT", "Using local DevQ as Message Bus for Gale Broker");
 
             return new DevQMessageBus(process.env['LOCAL_DEVQ_ENDPOINT'], config);
