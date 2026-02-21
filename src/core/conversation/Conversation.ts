@@ -1,4 +1,4 @@
-import { TotoMessageBus } from "totoms";
+import { Logger, TotoMessageBus } from "totoms";
 import { GaleConfig } from "../../Config";
 import { AgentsCatalog } from "../catalog/AgentsCatalog";
 import { ConversationStore } from "../../store/ConversationStore";
@@ -56,11 +56,17 @@ export class Conversation {
      */
     async sendMessageToAgent(agentMessage: AgentConversationMessage) {
 
+        const logger = Logger.getInstance();
         const db = await this.config.getMongoDb(this.config.getDBName());
 
         const agentsCatalog = new AgentsCatalog(db, this.config);
         
         const agentDefinition = await agentsCatalog.getAgent(agentMessage.agentId);
+
+        if (!agentDefinition) {
+            logger.compute(this.cid, `Agent with ID [${agentMessage.agentId}] not found`, "error");
+            throw new Error(`Agent with ID [${agentMessage.agentId}] not found`);
+        }
 
         await new DefaultAgentCallFactory(this.cid, this.config).createAgentCall(agentDefinition).sendMessage(agentMessage);
 

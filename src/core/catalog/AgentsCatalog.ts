@@ -55,6 +55,8 @@ export class AgentsCatalog {
 
         const agentData = await agentsCollection.findOne({ taskId: taskId });
 
+        if (!agentData) throw new ValidationError(404, `Agent with taskId ${taskId} not found`);
+
         return AgentDefinition.fromBSON(agentData);
     }
 
