@@ -3,6 +3,8 @@ import { Logger } from "totoms";
 import { AgentDefinition } from "../model/AgentDefinition";
 import { AgentTaskRequest, AgentTaskResponse } from "../model/AgentTask";
 import { AgentConversationMessage } from "../model/AgentMessage";
+import { GaleConfig } from "../Config";
+import { generateTotoJWTToken } from "../util/GenerateTotoJWTToken";
 
 export interface AgentCallFactory {
     createAgentCall(agentDefinition: AgentDefinition): AgentCall;
@@ -10,7 +12,14 @@ export interface AgentCallFactory {
 
 export class DefaultAgentCallFactory implements AgentCallFactory {
 
-    constructor(private cid: string, private bearerToken?: string) { }
+    private bearerToken: string;
+
+    constructor(private cid: string, private config: GaleConfig, bearerToken?: string) {
+
+        if (!bearerToken) this.bearerToken = generateTotoJWTToken("gale-broker", config);
+        else this.bearerToken = bearerToken;
+
+    }
 
     createAgentCall(agentDefinition: AgentDefinition): AgentCall {
         return new AgentCall(agentDefinition, Logger.getInstance(), this.cid, this.bearerToken);
@@ -22,9 +31,9 @@ export class AgentCall {
     logger: Logger;
     cid: string;
     agentDefinition: AgentDefinition;
-    bearerToken?: string;
+    bearerToken: string;
 
-    constructor(agentDefinition: AgentDefinition, logger: Logger, cid: string, bearerToken?: string) {
+    constructor(agentDefinition: AgentDefinition, logger: Logger, cid: string, bearerToken: string) {
 
         this.agentDefinition = agentDefinition;
         this.logger = logger;
@@ -50,7 +59,7 @@ export class AgentCall {
                 method: 'POST',
                 headers: {
                     'x-correlation-id': this.cid,
-                    'Authorization': this.bearerToken ? `Bearer ${this.bearerToken}` : null,
+                    'Authorization': `Bearer ${this.bearerToken}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify(msg)

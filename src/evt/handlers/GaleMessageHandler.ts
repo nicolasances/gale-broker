@@ -1,17 +1,26 @@
 import { Logger, ProcessingResponse, TotoMessage, TotoMessageHandler } from "totoms";
 import { TaskExecution } from "../../core/task/TaskExecution";
-import { generateTotoJWTToken } from "../../util/GenerateTotoJWTToken";
 import { AgentTaskRequest } from "../../model/AgentTask";
 import { DefaultAgentCallFactory } from "../../api/AgentCall";
 import { AgenticFlowTracker } from "../../core/tracking/AgenticFlowTracker";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 import { AgentStatusTracker } from "../../core/tracking/AgentStatusTracker";
 import { GaleConfig } from "../../Config";
+import { agentConversationMessageFromTotoMessage } from "../../model/AgentMessage";
+import { Conversation } from "../../core/conversation/Conversation";
 
 export class GaleMessageHandler extends TotoMessageHandler {
 
     protected handledMessageType: string = "task";
 
+    /**
+     * Handles these types of message: 
+     * - Messages for task execution
+     * - Messages for conversation message
+     * 
+     * @param msg 
+     * @returns 
+     */
     protected async onMessage(msg: TotoMessage): Promise<ProcessingResponse> {
 
         const logger = Logger.getInstance();
@@ -21,9 +30,6 @@ export class GaleMessageHandler extends TotoMessageHandler {
         logger.compute(cid, `Handling Gale Message of type [${msg.type}]`, "info");
 
         const db = await config.getMongoDb(config.getDBName());
-
-        // Get a token 
-        const token = generateTotoJWTToken("gale-broker", config);
 
         try {
 
@@ -36,15 +42,24 @@ export class GaleMessageHandler extends TotoMessageHandler {
                     logger,
                     cid,
                     messageBus: this.messageBus,
-                    agentCallFactory: new DefaultAgentCallFactory(cid, token),
+                    agentCallFactory: new DefaultAgentCallFactory(cid, config),
                     agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
                     agentsCatalog: new AgentsCatalog(db, config)
                 }).do(taskRequest);
 
                 return { status: "processed" };
             }
+            else if (msg.type === 'agentMessagePosted') {
+
+                const agentMessage = agentConversationMessageFromTotoMessage(msg);
+
+                await new Conversation(config, this.messageBus, cid).processNewMessage(agentMessage);
+
+                return { status: "processed" };
+            }
 
             logger.compute(cid, `Unknown event type [${msg.type}] received`);
+
             return { status: "ignored", responsePayload: `Unknown event type ${msg.type}` };
 
         } catch (error) {
@@ -55,3 +70,5 @@ export class GaleMessageHandler extends TotoMessageHandler {
     }
 
 }
+
+export type SupportedMessageType = "task" | "agentMessagePosted";

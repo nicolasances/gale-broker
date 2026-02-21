@@ -1,3 +1,4 @@
+import { TotoMessage } from "totoms/dist/evt/TotoMessage";
 
 /**
  * Model for the message to agent as part of a conversation.
@@ -8,4 +9,9 @@ export interface AgentConversationMessage {
     agentId: string;        // ID of the agent this message is directed to
     message: string;        // The user message content
     userEmail: string;     // Email of the user who sent the message (useful for personalization or follow-up)
+}
+
+export function agentConversationMessageFromTotoMessage(msg: TotoMessage): AgentConversationMessage {
+    const { conversationId, messageId, agentId, message, userEmail } = msg.data;
+    return { conversationId, messageId, agentId, message, userEmail };
 }

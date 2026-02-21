@@ -24,10 +24,6 @@ export class Conversation {
 
         const db = await this.config.getMongoDb(this.config.getDBName());
         const conversationStore = new ConversationStore(db, this.config);
-        const agentsCatalog = new AgentsCatalog(db, this.config);
-
-        // Retrieve the Agent Definition
-        const agent = await agentsCatalog.getAgent(message.agentId);
 
         // Store the message (creates a new conversation if needed) and resolve the conversationId
         const { conversationId, messageId } = await conversationStore.storeMessage(message.agentId, message.message, message.userEmail, message.conversationId);
@@ -52,6 +48,25 @@ export class Conversation {
 
         return { conversationId, messageId };
     }
+
+    /**
+     * Sends the message to the agent (synchronourly) for processing.
+     * 
+     * @param agentMessage 
+     */
+    async sendMessageToAgent(agentMessage: AgentConversationMessage) {
+
+        const db = await this.config.getMongoDb(this.config.getDBName());
+
+        const agentsCatalog = new AgentsCatalog(db, this.config);
+        
+        const agentDefinition = await agentsCatalog.getAgent(agentMessage.agentId);
+
+        await new DefaultAgentCallFactory(this.cid, this.config).createAgentCall(agentDefinition).sendMessage(agentMessage);
+
+    }
+
+        
 }
 
 export interface ConversationMessage {
