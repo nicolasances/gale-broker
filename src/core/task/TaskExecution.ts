@@ -218,7 +218,7 @@ export class TaskExecution {
      */
     private async callAgent(agent: AgentDefinition, task: AgentTaskRequest, attempts = 0): Promise<AgentTaskResponse> {
 
-        const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
+        const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).sendTask(task, task.correlationId!);
 
         if (agentTaskResponse.stopReason == 'failed' && attempts <= MAX_AGENT_CALL_RETRIES) {
 

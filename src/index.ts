@@ -28,10 +28,12 @@ const config: TotoMicroserviceConfiguration = {
             { method: 'GET', path: '/catalog/agents', delegate: GetAgents },
             { method: 'DELETE', path: '/catalog/agents/:taskId', delegate: DeleteAgent },
             { method: 'GET', path: '/catalog/agents/:taskId', delegate: GetAgent },
+
             // Agent Executions
             { method: 'POST', path: '/tasks', delegate: PostTask },
             { method: 'GET', path: '/tasks', delegate: GetRootTasks },
             { method: 'GET', path: '/tasks/:taskInstanceId', delegate: GetAgentExecutionRecord },
+            
             // Agentic Flows
             { method: 'GET', path: '/flows/:correlationId', delegate: GetAgenticFlow },
         ]

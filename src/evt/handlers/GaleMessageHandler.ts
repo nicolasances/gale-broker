@@ -36,7 +36,7 @@ export class GaleMessageHandler extends TotoMessageHandler {
                     logger,
                     cid,
                     messageBus: this.messageBus,
-                    agentCallFactory: new DefaultAgentCallFactory(logger, cid, token),
+                    agentCallFactory: new DefaultAgentCallFactory(cid, token),
                     agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
                     agentsCatalog: new AgentsCatalog(db, config)
                 }).do(taskRequest);

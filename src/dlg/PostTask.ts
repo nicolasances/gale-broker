@@ -20,14 +20,14 @@ export class PostTask extends TotoDelegate<PostTaskRequest, AgentTaskResponse> {
         const logger = Logger.getInstance();
         const cid = this.cid || "";
 
-                const db = await config.getMongoDb(config.getDBName());
+        const db = await config.getMongoDb(config.getDBName());
 
         const result = await new TaskExecution({
             config,
             logger,
             cid,
             messageBus: this.messageBus,
-            agentCallFactory: new DefaultAgentCallFactory(logger, cid, req.bearerToken || undefined),
+            agentCallFactory: new DefaultAgentCallFactory(cid, req.bearerToken || undefined),
             agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
             agentsCatalog: new AgentsCatalog(db, config)
         }).do(req.taskRequest);
