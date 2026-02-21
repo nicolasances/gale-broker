@@ -1,87 +1,51 @@
-import { TotoAPIController, TotoControllerConfig } from "toto-api-controller";
+import { TotoMicroservice, TotoMicroserviceConfiguration, SupportedHyperscalers, getHyperscalerConfiguration } from "totoms";
 import { GaleConfig } from "./Config";
 import { RegisterAgent } from "./dlg/catalog/PostAgent";
 import { PostTask } from "./dlg/PostTask";
 import { UpdateAgent } from "./dlg/catalog/PutAgent";
-import { PubSubMessageBus } from "./bus/impl/google/PubSub";
-import { OnAgentEvent } from "./evt/dlg/OnAgentEvent";
-import { DevQMessageBus } from "./bus/impl/google/DevQ";
-import { SQSMessageBus } from "./bus/impl/aws/SQS";
-import { IMessageBus, MessageBusFactory } from "./bus/MessageBus";
 import { GetAgents } from "./dlg/catalog/GetAgents";
 import { DeleteAgent } from "./dlg/catalog/DeleteAgent";
 import { GetRootTasks } from "./dlg/tracking/GetRootTasks";
 import { GetAgent } from "./dlg/catalog/GetAgent";
 import { GetAgenticFlow } from "./dlg/tracking/GetAgenticFlow";
 import { GetAgentExecutionRecord } from "./dlg/tracking/GetAgentExecutionRecord";
+import { GaleMessageHandler } from "./evt/handlers/GaleMessageHandler";
 
-export const APINAME = "gale-broker";
-
-class GaleMessageBusFactory extends MessageBusFactory {
-
-    createMessageBus(config: TotoControllerConfig): IMessageBus {
-
-        // Override to be able to run Gale Broker locally using a local message bus (DevQ)
-        if (process.env['LOCAL_DEVQ_ENDPOINT']) {
-            config.logger?.compute("INIT", "Using local DevQ as Message Bus for Gale Broker");
-
-            return new DevQMessageBus(process.env['LOCAL_DEVQ_ENDPOINT'], config);
-        }
-
-        switch (config.hyperscaler) {
-            case "aws":
-                config.logger?.compute("INIT", "Using AWS SQS as Message Bus for Gale Broker");
-                return new SQSMessageBus(process.env['SQS_QUEUE_URL']!, "eu-north-1")
-            case "gcp":
-                config.logger?.compute("INIT", "Using Google Pub/Sub as Message Bus for Gale Broker");
-                return new PubSubMessageBus();
-            default:
-                throw new Error(`Unsupported hyperscaler: ${config.hyperscaler}`);
-        }
+const config: TotoMicroserviceConfiguration = {
+    serviceName: "gale-broker",
+    basePath: '/galebroker',
+    port: process.env.GALE_BROKER_PORT ? parseInt(process.env.GALE_BROKER_PORT) : 8080,
+    environment: {
+        hyperscaler: (process.env.HYPERSCALER as SupportedHyperscalers) || "aws",
+        hyperscalerConfiguration: getHyperscalerConfiguration()
+    },
+    customConfiguration: GaleConfig,
+    apiConfiguration: {
+        apiEndpoints: [
+            // Agent Catalog
+            { method: 'POST', path: '/catalog/agents', delegate: RegisterAgent },
+            { method: 'PUT', path: '/catalog/agents', delegate: UpdateAgent },
+            { method: 'GET', path: '/catalog/agents', delegate: GetAgents },
+            { method: 'DELETE', path: '/catalog/agents/:taskId', delegate: DeleteAgent },
+            { method: 'GET', path: '/catalog/agents/:taskId', delegate: GetAgent },
+            // Agent Executions
+            { method: 'POST', path: '/tasks', delegate: PostTask },
+            { method: 'GET', path: '/tasks', delegate: GetRootTasks },
+            { method: 'GET', path: '/tasks/:taskInstanceId', delegate: GetAgentExecutionRecord },
+            // Agentic Flows
+            { method: 'GET', path: '/flows/:correlationId', delegate: GetAgenticFlow },
+        ]
+    },
+    messageBusConfiguration: {
+        topics: [
+            { logicalName: "galeagents", secret: "topic-name-gale-agents" }
+        ],
+        messageHandlers: [
+            GaleMessageHandler
+        ]
     }
-}
-
-export const galeConfig = new GaleConfig({
-    messageBusFactory: new GaleMessageBusFactory(), 
-    apiName: APINAME
-}, {
-    defaultHyperscaler: "aws", 
-    defaultSecretsManagerLocation: "aws"
-});
-
-const api = new TotoAPIController(galeConfig, { basePath: '/galebroker', port: process.env.GALE_BROKER_PORT ? parseInt(process.env.GALE_BROKER_PORT) : 8080 });
-
-// Endpoints related to Agent Catalog
-api.path('POST', '/catalog/agents', new RegisterAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false }); // Temporary, until API-key based auth is implemented.
-api.path('PUT', '/catalog/agents', new UpdateAgent(), { contentType: 'application/json', noAuth: true, ignoreBasePath: false });    // Temporary, until API-key based auth is implemented.
-api.path('GET', '/catalog/agents', new GetAgents());
-api.path('DELETE', '/catalog/agents/:taskId', new DeleteAgent());
-api.path('GET', '/catalog/agents/:taskId', new GetAgent());
-
-// Endpoints related to Agent Executions
-api.path('POST', '/tasks', new PostTask());
-api.path('GET', '/tasks', new GetRootTasks())
-api.path('GET', '/tasks/:taskInstanceId', new GetAgentExecutionRecord());
-
-// Endpoints related to Agentic Flows
-api.path('GET', '/flows/:correlationId', new GetAgenticFlow());
-
-// Endpoints for async events (push pubsub-like brokers)
-api.path('POST', '/events/agent', new OnAgentEvent()); 
-
-
-api.init().then(() => {
-    api.listen();
-});
-
-const shutdown = async () => {
-
-    console.log('Shutting down gracefully...');
-    
-    await GaleConfig.closeMongoClient();
-    
-    process.exit(0);
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+TotoMicroservice.init(config).then((microservice: TotoMicroservice) => {
+    microservice.start();
+});

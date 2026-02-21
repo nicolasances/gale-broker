@@ -1,6 +1,6 @@
 import http from "request";
+import { Logger } from "totoms";
 import { AgentDefinition } from "../model/AgentDefinition";
-import { ExecutionContext } from "toto-api-controller";
 import { AgentTaskRequest, AgentTaskResponse } from "../model/AgentTask";
 
 export interface AgentCallFactory {
@@ -9,23 +9,25 @@ export interface AgentCallFactory {
 
 export class DefaultAgentCallFactory implements AgentCallFactory {
 
-    constructor(private execContext: ExecutionContext, private bearerToken?: string) { }
+    constructor(private logger: Logger, private cid: string, private bearerToken?: string) { }
 
     createAgentCall(agentDefinition: AgentDefinition): AgentCall {
-        return new AgentCall(agentDefinition, this.execContext, this.bearerToken);
+        return new AgentCall(agentDefinition, this.logger, this.cid, this.bearerToken);
     }
 }
 
 export class AgentCall {
 
-    execContext: ExecutionContext;
+    logger: Logger;
+    cid: string;
     agentDefinition: AgentDefinition;
     bearerToken?: string;
 
-    constructor(agentDefinition: AgentDefinition, execContext: ExecutionContext, bearerToken?: string) {
+    constructor(agentDefinition: AgentDefinition, logger: Logger, cid: string, bearerToken?: string) {
 
         this.agentDefinition = agentDefinition;
-        this.execContext = execContext;
+        this.logger = logger;
+        this.cid = cid;
         this.bearerToken = bearerToken;
 
     }
@@ -37,7 +39,7 @@ export class AgentCall {
      */
     async execute(task: AgentTaskRequest, correlationId: string): Promise<AgentTaskResponse> {
 
-        this.execContext.logger.compute(this.execContext.cid, `Calling Agent [${this.agentDefinition.name}] at [${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.executionPath}]`);
+        this.logger.compute(this.cid, `Calling Agent [${this.agentDefinition.name}] at [${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.executionPath}]`);
 
         return new Promise<AgentTaskResponse>((success, failure) => {
 
@@ -45,7 +47,7 @@ export class AgentCall {
                 uri: `${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.executionPath}`,
                 method: 'POST',
                 headers: {
-                    'x-correlation-id': this.execContext.cid,
+                    'x-correlation-id': this.cid,
                     'Authorization': this.bearerToken ? `Bearer ${this.bearerToken}` : null,
                     'Content-Type': 'application/json'
                 },

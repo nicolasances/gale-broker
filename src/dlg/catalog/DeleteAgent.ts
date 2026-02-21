@@ -1,26 +1,24 @@
 import { Request } from "express";
-import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
-import { AgentDefinition } from "../../model/AgentDefinition";
+import { Logger, TotoDelegate, TotoRequest, TotoRuntimeError, UserContext, ValidationError } from "totoms";
 import { GaleConfig } from "../../Config";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 
-export class DeleteAgent implements TotoDelegate {
+export class DeleteAgent extends TotoDelegate<DeleteAgentRequest, DeleteAgentResponse> {
 
-    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<DeleteAgentResponse> {
+    async do(req: DeleteAgentRequest, userContext?: UserContext): Promise<DeleteAgentResponse> {
 
-        const config = execContext.config as GaleConfig;
-        const logger = execContext.logger;
-        const cid = execContext.cid;
+        const config = this.config as GaleConfig;
+        const logger = Logger.getInstance();
+        const cid = this.cid;
 
-        const taskId = req.params.taskId;
+        const taskId = req.taskId;
 
         try {
 
-            const client = await config.getMongoClient();
-            const db = client.db(config.getDBName());
+                        const db = await config.getMongoDb(config.getDBName());
 
             // Register the agent in the catalog
-            const deletedCount = await new AgentsCatalog(db, execContext).deleteAgentsWithTaskId(taskId);
+            const deletedCount = await new AgentsCatalog(db, this.config as GaleConfig).deleteAgentsWithTaskId(taskId);
 
             return { deletedCount }
 
@@ -41,6 +39,17 @@ export class DeleteAgent implements TotoDelegate {
 
     }
 
+    public parseRequest(req: Request): DeleteAgentRequest {
+        const taskId = req.params.taskId;
+        if (!taskId) throw new ValidationError(400, "taskId is required");
+
+        return { taskId };
+    }
+
+}
+
+interface DeleteAgentRequest extends TotoRequest {
+    taskId: string;
 }
 
 interface DeleteAgentResponse {

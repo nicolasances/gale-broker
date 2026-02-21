@@ -1,24 +1,23 @@
 import { Request } from "express";
-import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
+import { Logger, TotoDelegate, TotoRequest, TotoRuntimeError, UserContext, ValidationError } from "totoms";
 import { AgentDefinition } from "../../model/AgentDefinition";
 import { GaleConfig } from "../../Config";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 
-export class GetAgents implements TotoDelegate {
+export class GetAgents extends TotoDelegate<GetAgentsRequest, GetAgentsResponse> {
 
-    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<GetAgentsResponse> {
+    async do(req: GetAgentsRequest, userContext?: UserContext): Promise<GetAgentsResponse> {
 
-        const config = execContext.config as GaleConfig;
-        const logger = execContext.logger;
-        const cid = execContext.cid;
+        const config = this.config as GaleConfig;
+        const logger = Logger.getInstance();
+        const cid = this.cid;
 
         try {
 
-            const client = await config.getMongoClient();
-            const db = client.db(config.getDBName());
+                        const db = await config.getMongoDb(config.getDBName());
 
             // Register the agent in the catalog
-            const agents = await new AgentsCatalog(db, execContext).getAgents();
+            const agents = await new AgentsCatalog(db, config).getAgents();
 
             return { agents }
 
@@ -39,7 +38,13 @@ export class GetAgents implements TotoDelegate {
 
     }
 
+    public parseRequest(req: Request): GetAgentsRequest {
+        return {};
+    }
+
 }
+
+interface GetAgentsRequest extends TotoRequest {}
 
 interface GetAgentsResponse {
     agents: AgentDefinition[];

@@ -1,4 +1,4 @@
-import { TotoRuntimeError } from "toto-api-controller";
+import { TotoRuntimeError } from "totoms";
 import { AgentTaskRequest } from "../../model/AgentTask";
 
 export class AgenticFlow {

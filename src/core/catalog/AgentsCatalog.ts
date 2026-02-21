@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
+import { TotoRuntimeError, ValidationError } from "totoms";
 import { GaleConfig } from "../../Config";
 import { TaskId } from "../../model/AgentTask";
 
@@ -8,8 +8,8 @@ export class AgentsCatalog {
 
     private config: GaleConfig;
 
-    constructor(private db: Db, private execContext: ExecutionContext) {
-        this.config = execContext.config as GaleConfig;
+    constructor(private db: Db, config: GaleConfig) {
+        this.config = config;
     }
 
     /**

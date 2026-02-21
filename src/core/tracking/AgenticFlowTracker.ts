@@ -1,5 +1,5 @@
 import { Db } from "mongodb";
-import { correlationId, ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
+import { TotoRuntimeError, ValidationError } from "totoms";
 import { AgentStatusTracker } from "./AgentStatusTracker";
 import { AgentTaskRequest, AgentTaskResponse } from "../../model/AgentTask";
 import { AgenticFlow, AgentNode } from "./AgenticFlow";
@@ -20,9 +20,9 @@ export class AgenticFlowTracker {
     agentStatusTracker: AgentStatusTracker;
     flowsCollection: any;
 
-    constructor(private db: Db, private execContext: ExecutionContext, agentStatusTracker: AgentStatusTracker) {
+    constructor(private db: Db, private config: GaleConfig, agentStatusTracker: AgentStatusTracker) {
         this.agentStatusTracker = agentStatusTracker;
-        this.flowsCollection = this.db.collection((this.execContext.config as GaleConfig).getCollections().flows);
+        this.flowsCollection = this.db.collection(this.config.getCollections().flows);
     }
 
     /**

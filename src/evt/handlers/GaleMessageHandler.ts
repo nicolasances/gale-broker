@@ -1,43 +1,55 @@
-import { ExecutionContext, Logger } from "toto-api-controller";
-import { GaleMessage } from "../../bus/MessageBus";
+import { Logger, ProcessingResponse, TotoMessage, TotoMessageHandler } from "totoms";
 import { TaskExecution } from "../../core/task/TaskExecution";
-import { APINAME, galeConfig } from "../..";
 import { generateTotoJWTToken } from "../../util/GenerateTotoJWTToken";
 import { AgentTaskRequest } from "../../model/AgentTask";
 import { DefaultAgentCallFactory } from "../../api/AgentCall";
 import { AgenticFlowTracker } from "../../core/tracking/AgenticFlowTracker";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 import { AgentStatusTracker } from "../../core/tracking/AgentStatusTracker";
+import { GaleConfig } from "../../Config";
 
-export class GaleMessageHandler {
+export class GaleMessageHandler extends TotoMessageHandler {
 
-    async onMessage(msg: GaleMessage): Promise<void> {
+    protected handledMessageType: string = "task";
 
-        const logger = new Logger(APINAME);
+    protected async onMessage(msg: TotoMessage): Promise<ProcessingResponse> {
 
-        logger.compute(msg.cid, `Handling Gale Message of type [${msg.type}]`, "info");
+        const logger = Logger.getInstance();
+        const cid = this.cid || msg.cid || "";
+        const config = this.config as GaleConfig;
 
-        // Create an execution context
-        const execContext = new ExecutionContext(logger, APINAME, galeConfig, msg.cid);
+        logger.compute(cid, `Handling Gale Message of type [${msg.type}]`, "info");
 
-        const client = await galeConfig.getMongoClient();
-        const db = client.db(galeConfig.getDBName());
+        const db = await config.getMongoDb(config.getDBName());
 
         // Get a token 
-        const token = generateTotoJWTToken("gale-broker", galeConfig);
+        const token = generateTotoJWTToken("gale-broker", config);
 
-        switch (msg.type) {
-            case 'task':
-                // Trigger a task execution
+        try {
+
+            if (msg.type === 'task') {
+
+                const taskRequest = AgentTaskRequest.fromHTTPRequest({ body: msg.data });
+
                 await new TaskExecution({
-                    execContext,
-                    agentCallFactory: new DefaultAgentCallFactory(execContext, token),
-                    agenticFlowTracker: new AgenticFlowTracker(db, execContext, new AgentStatusTracker(db, execContext)),
-                    agentsCatalog: new AgentsCatalog(db, execContext)
-                }).do(AgentTaskRequest.fromHTTPRequest({ body: msg.payload }));
-                break;
-            default:
-                logger.compute("", `Unknown event type [${msg.type}] received`);
+                    config,
+                    logger,
+                    cid,
+                    messageBus: this.messageBus,
+                    agentCallFactory: new DefaultAgentCallFactory(logger, cid, token),
+                    agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
+                    agentsCatalog: new AgentsCatalog(db, config)
+                }).do(taskRequest);
+
+                return { status: "processed" };
+            }
+
+            logger.compute(cid, `Unknown event type [${msg.type}] received`);
+            return { status: "ignored", responsePayload: `Unknown event type ${msg.type}` };
+
+        } catch (error) {
+            logger.compute(cid, `${error}`, "error");
+            return { status: "failed", responsePayload: error };
         }
 
     }

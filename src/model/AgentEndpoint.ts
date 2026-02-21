@@ -1,4 +1,4 @@
-import { ValidationError } from "toto-api-controller/dist/validation/Validator";
+import { ValidationError } from "totoms";
 
 export class AgentEndpoint {
 
