@@ -27,7 +27,7 @@ export class PostTask extends TotoDelegate<PostTaskRequest, AgentTaskResponse> {
             logger,
             cid,
             messageBus: this.messageBus,
-            agentCallFactory: new DefaultAgentCallFactory(cid, req.bearerToken || undefined),
+            agentCallFactory: new DefaultAgentCallFactory(cid, config, req.bearerToken || undefined),
             agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
             agentsCatalog: new AgentsCatalog(db, config)
         }).do(req.taskRequest);
