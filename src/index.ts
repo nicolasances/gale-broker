@@ -51,7 +51,7 @@ const config: TotoMicroserviceConfiguration = {
             AgentTaskMsgHandler, 
             AgentMessageMsgHandler
         ], 
-        messageBusOverride: new DevQImpl()
+        messageBusOverride: process.env.USE_DEVQ ? new DevQImpl() : undefined
     }
 };
 
