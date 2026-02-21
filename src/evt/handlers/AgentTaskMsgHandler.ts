@@ -9,7 +9,7 @@ import { GaleConfig } from "../../Config";
 import { agentConversationMessageFromTotoMessage } from "../../model/AgentMessage";
 import { Conversation } from "../../core/conversation/Conversation";
 
-export class GaleMessageHandler extends TotoMessageHandler {
+export class AgentTaskMsgHandler extends TotoMessageHandler {
 
     protected handledMessageType: string = "task";
 
@@ -33,34 +33,19 @@ export class GaleMessageHandler extends TotoMessageHandler {
 
         try {
 
-            if (msg.type === 'task') {
+            const taskRequest = AgentTaskRequest.fromHTTPRequest({ body: msg.data });
 
-                const taskRequest = AgentTaskRequest.fromHTTPRequest({ body: msg.data });
+            await new TaskExecution({
+                config,
+                logger,
+                cid,
+                messageBus: this.messageBus,
+                agentCallFactory: new DefaultAgentCallFactory(cid, config),
+                agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
+                agentsCatalog: new AgentsCatalog(db, config)
+            }).do(taskRequest);
 
-                await new TaskExecution({
-                    config,
-                    logger,
-                    cid,
-                    messageBus: this.messageBus,
-                    agentCallFactory: new DefaultAgentCallFactory(cid, config),
-                    agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
-                    agentsCatalog: new AgentsCatalog(db, config)
-                }).do(taskRequest);
-
-                return { status: "processed" };
-            }
-            else if (msg.type === 'agentMessagePosted') {
-
-                const agentMessage = agentConversationMessageFromTotoMessage(msg);
-
-                await new Conversation(config, this.messageBus, cid).processNewMessage(agentMessage);
-
-                return { status: "processed" };
-            }
-
-            logger.compute(cid, `Unknown event type [${msg.type}] received`);
-
-            return { status: "ignored", responsePayload: `Unknown event type ${msg.type}` };
+            return { status: "processed" };
 
         } catch (error) {
             logger.compute(cid, `${error}`, "error");
@@ -70,5 +55,3 @@ export class GaleMessageHandler extends TotoMessageHandler {
     }
 
 }
-
-export type SupportedMessageType = "task" | "agentMessagePosted";

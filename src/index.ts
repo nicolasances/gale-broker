@@ -1,4 +1,4 @@
-import { TotoMicroservice, TotoMicroserviceConfiguration, SupportedHyperscalers, getHyperscalerConfiguration } from "totoms";
+import { TotoMicroservice, TotoMicroserviceConfiguration, SupportedHyperscalers, getHyperscalerConfiguration, DevQImpl } from "totoms";
 import { GaleConfig } from "./Config";
 import { RegisterAgent } from "./dlg/catalog/PostAgent";
 import { PostTask } from "./dlg/PostTask";
@@ -9,8 +9,9 @@ import { GetRootTasks } from "./dlg/tracking/GetRootTasks";
 import { GetAgent } from "./dlg/catalog/GetAgent";
 import { GetAgenticFlow } from "./dlg/tracking/GetAgenticFlow";
 import { GetAgentExecutionRecord } from "./dlg/tracking/GetAgentExecutionRecord";
-import { GaleMessageHandler } from "./evt/handlers/GaleMessageHandler";
+import { AgentMessageMsgHandler } from "./evt/handlers/AgentMessageMsgHandler";
 import { PostConversationMessage } from "./dlg/PostConversationMessage";
+import { AgentTaskMsgHandler } from "./evt/handlers/AgentTaskMsgHandler";
 
 const config: TotoMicroserviceConfiguration = {
     serviceName: "gale-broker",
@@ -47,8 +48,10 @@ const config: TotoMicroserviceConfiguration = {
             { logicalName: "galeagents", secret: "topic-name-gale-agents" }
         ],
         messageHandlers: [
-            GaleMessageHandler
-        ]
+            AgentTaskMsgHandler, 
+            AgentMessageMsgHandler
+        ], 
+        messageBusOverride: new DevQImpl()
     }
 };
 
