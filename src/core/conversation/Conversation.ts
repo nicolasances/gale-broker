@@ -25,13 +25,10 @@ export class Conversation {
         const db = await this.config.getMongoDb(this.config.getDBName());
         const conversationStore = new ConversationStore(db, this.config);
 
-        // Store the message (creates a new conversation if needed) and resolve the conversationId
-        const { conversationId, messageId } = await conversationStore.storeMessage(message.agentId, message.message, message.userEmail, message.conversationId);
-
-        // Send the message asynchronously to the agent for processing (the agent can decide to process it synchronously or asynchronously, if asynchronously the agent will be responsible to update the conversation with the answer when it's ready)
+        // Build the agent message (conversationId and messageId will be resolved by the store)
         const agentMessage: AgentConversationMessage = {
-            conversationId,
-            messageId,
+            conversationId: message.conversationId,
+            messageId: "",
             agentId: message.agentId,
             message: message.message,
             actor: "user",
@@ -39,6 +36,12 @@ export class Conversation {
                 subjectEmail: message.userEmail
             }
         }
+
+        // Store the message (creates a new conversation if needed) and resolve the conversationId and messageId
+        const { conversationId, messageId } = await conversationStore.storeMessage(agentMessage);
+
+        agentMessage.conversationId = conversationId;
+        agentMessage.messageId = messageId;
 
         await this.messageBus.publishMessage({ topic: "galeagents" }, {
             type: "agentMessagePosted",

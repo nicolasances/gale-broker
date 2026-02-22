@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { GaleConfig } from "../Config";
-import { v4 as uuid } from "uuid";
+import { AgentConversationMessage } from "../model/AgentMessage";
 
 export class ConversationStore {
 
@@ -19,13 +19,14 @@ export class ConversationStore {
      * a new conversation is created and its id is returned.
      * In either case the message is added to the conversationMessages collection.
      *
-     * @param agentId         ID of the agent this conversation is directed to
-     * @param message         The user message content
-     * @param userEmail       Email of the user who sent the message
-     * @param conversationId  Optional existing conversation ID
-     * @returns               The conversation ID (existing or newly created)
+     * @param msg  The agent conversation message to store
+     * @returns    The conversation ID (existing or newly created) and the message ID
      */
-    async storeMessage(agentId: string, message: string, userEmail: string, conversationId?: string): Promise<{ conversationId: string, messageId: string }> {
+    async storeMessage(msg: AgentConversationMessage): Promise<{ conversationId: string, messageId: string }> {
+
+        const { agentId, message, extras } = msg;
+        const userEmail = extras?.subjectEmail ?? "unknown";
+        let conversationId: string | undefined = msg.conversationId || undefined;
 
         const now = new Date().toISOString();
 
