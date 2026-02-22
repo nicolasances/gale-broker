@@ -73,7 +73,7 @@ export class AgentCall {
 
                 if (resp.statusCode != 200) {
                     success(new AgentTaskResponse({
-                        correlationId: msg.conversationId,
+                        correlationId: msg.conversationId || "",
                         stopReason: "failed",
                         taskOutput: { error: `Agent responded with status code ${resp.statusCode}: ${body}` },
                     }));
