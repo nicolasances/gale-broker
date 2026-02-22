@@ -50,12 +50,12 @@ export class AgentCall {
      */
     async sendMessage(msg: AgentConversationMessage): Promise<AgentTaskResponse> {
 
-        this.logger.compute(this.cid, `Calling Agent [${this.agentDefinition.name}] at [${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.executionPath}]`);
+        this.logger.compute(this.cid, `Calling Agent [${this.agentDefinition.name}] at [${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.messagesPath}]`);
 
         return new Promise<AgentTaskResponse>((success, failure) => {
 
             http({
-                uri: `${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.executionPath}`,
+                uri: `${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.messagesPath}`,
                 method: 'POST',
                 headers: {
                     'x-correlation-id': this.cid,
