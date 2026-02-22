@@ -34,7 +34,10 @@ export class Conversation {
             messageId,
             agentId: message.agentId,
             message: message.message,
-            userEmail: message.userEmail,
+            actor: "user",
+            extras: {
+                subjectEmail: message.userEmail
+            }
         }
 
         await this.messageBus.publishMessage({ topic: "galeagents" }, {
