@@ -53,9 +53,9 @@ export class AgentsCatalog {
 
         const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
-        const agentData = await agentsCollection.findOne({ taskId: taskId });
+        const agentData = await agentsCollection.findOne({ $or: [{ taskId: taskId }, { agentId: taskId }] });
 
-        if (!agentData) throw new ValidationError(404, `Agent with taskId ${taskId} not found`);
+        if (!agentData) throw new ValidationError(404, `Agent with taskId or agentId [${taskId}] not found`);
 
         return AgentDefinition.fromBSON(agentData);
     }
@@ -131,7 +131,7 @@ export class AgentsCatalog {
 const stripDollarProps = (obj: any): any => {
 
     if (typeof obj !== 'object' || obj === null) return obj;
-    
+
     if (Array.isArray(obj)) return obj.map(stripDollarProps);
 
     return Object.fromEntries(
