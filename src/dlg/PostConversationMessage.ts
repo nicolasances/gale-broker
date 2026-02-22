@@ -4,6 +4,11 @@ import { GaleConfig } from "../Config";
 import { v4 as uuid } from "uuid";
 import { Conversation } from "../core/conversation/Conversation";
 
+/**
+ * Delegate for a client to post a new message to a conversation with an Agent. 
+ * 
+ * If the conversationId is not provided, a new conversation will be created.
+ */
 export class PostConversationMessage extends TotoDelegate<PostConversationMessageRequest, PostConversationMessageResponse> {
 
     async do(req: PostConversationMessageRequest, userContext?: UserContext): Promise<PostConversationMessageResponse> {
