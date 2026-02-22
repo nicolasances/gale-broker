@@ -17,9 +17,13 @@ export class PostConversationMessage extends TotoDelegate<PostConversationMessag
 
         const { conversationId, messageId } = await new Conversation(config, this.messageBus, this.cid || uuid()).processNewMessage({
             conversationId: req.conversationId,
+            messageId: uuid(),
             agentId: req.agentId,
+            actor: req.actor,
             message: req.message,
-            userEmail: userContext?.email || "unknown",
+            extras: {
+                subjectEmail: userContext?.email || undefined
+            }, 
         })
 
         return { conversationId, messageId }
@@ -31,14 +35,18 @@ export class PostConversationMessage extends TotoDelegate<PostConversationMessag
         const conversationId = req.body.conversationId;
         const message = req.body.message;
         const agentId = req.body.agentId;
+        const actor = req.body.actor;
 
         if (!agentId) throw new ValidationError(400, "agentId is required in the request body");
         if (!message) throw new ValidationError(400, "message is required in the request body");
+        if (!actor) throw new ValidationError(400, "actor is required in the request body");
+        if (actor !== "user" && actor !== "agent") throw new ValidationError(400, "actor must be either 'user' or 'agent'");
 
         return {
             agentId,
             conversationId,
-            message
+            message, 
+            actor
         };
 
     }
@@ -51,6 +59,7 @@ interface PostConversationMessageRequest {
     agentId: string;            // ID of the agent to which the message should be posted
     conversationId?: string;    // ID of the conversation to which the message should be posted. If not provided, a new conversation will be created.
     message: string;            // The message to post to the conversation
+    actor: "user" | "agent";    // The actor posting the message (either "user" or "agent")
 }
 
 interface PostConversationMessageResponse {
