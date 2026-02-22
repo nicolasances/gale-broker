@@ -4,11 +4,13 @@ export class AgentEndpoint {
 
     baseURL: string; // The base URL of the Task Endpoint. E.g., "https://myagents.example.com/agentA"
     executionPath: string; // The path to execute tasks. E.g., "/tasks" that will be used with a POST request. 
+    messagesPath: string; // The path to send messages for conversational agents. E.g., "/messages" 
     infoPath: string; // The path to get info about the Agent. E.g., "/info" that will be used with a GET request to retrieve Agent metadata (e.g. the manifesto).
 
-    constructor(baseURL: string, executionPath: string = "/tasks", infoPath: string = "/info") {
+    constructor(baseURL: string, executionPath: string = "/tasks", messagesPath: string = "/messages", infoPath: string = "/info") {
         this.baseURL = baseURL;
         this.executionPath = executionPath;
+        this.messagesPath = messagesPath;
         this.infoPath = infoPath;
     }
 
@@ -19,6 +21,7 @@ export class AgentEndpoint {
         return new AgentEndpoint(
             data.baseURL,
             data.executionPath,
+            data.messagesPath,
             data.infoPath
         );
     }
@@ -27,6 +30,7 @@ export class AgentEndpoint {
         return new AgentEndpoint(
             data.baseURL,
             data.executionPath,
+            data.messagesPath,
             data.infoPath
         );
     }

@@ -4,6 +4,8 @@ import { TaskId } from "./AgentTask";
 
 export class AgentDefinition {
 
+    agentType: "conversational" | "taskExecutor" = "taskExecutor"; // Default to taskExecutor for backward compatibility
+
     /**
      * Unique identifier of the Agent. 
      * Human-readable code that is programmatically used to refer to the Agent. 
@@ -39,9 +41,16 @@ export class AgentDefinition {
 
     static fromJSON(data: any): AgentDefinition {
 
-        if (!data.name || !data.taskId || !data.endpoint || !data.inputSchema || !data.outputSchema) throw new ValidationError(400, `Invalid AgentDefinition JSON: missing required fields. Received ${JSON.stringify(data)}.`);
+        if (!data.name || !data.endpoint) throw new ValidationError(400, `Invalid AgentDefinition JSON: missing required fields. Received ${JSON.stringify(data)}.`);
+
+        const agentType = data.agentType || "taskExecutor"; // Default to taskExecutor for backward compatibility
+
+        if (agentType !== "conversational" && agentType !== "taskExecutor") throw new ValidationError(400, `Invalid AgentDefinition JSON: agentType must be either 'conversational' or 'taskExecutor'. Received ${JSON.stringify(data)}.`);
+        if (agentType == 'taskExecutor' && (!data.inputSchema || !data.outputSchema)) throw new ValidationError(400, `Invalid AgentDefinition JSON for taskExecutor: inputSchema and outputSchema are required. Received ${JSON.stringify(data)}.`);
+        if (agentType == 'taskExecutor' && !data.taskId) throw new ValidationError(400, `Invalid AgentDefinition JSON for taskExecutor: taskId is required. Received ${JSON.stringify(data)}.`);
 
         const def = new AgentDefinition();
+        def.agentType = agentType;
         def.agentId = data.agentId || data.taskId; // For backward compatibility, if agentId is not provided, use taskId as agentId
         def.name = data.name;
         def.description = data.description || "";
