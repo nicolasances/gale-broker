@@ -17,7 +17,7 @@ export class RegisterAgent extends TotoDelegate<RegisterAgentRequest, RegisterAg
 
         try {
 
-                        const db = await config.getMongoDb(config.getDBName());
+            const db = await config.getMongoDb(config.getDBName());
 
             // Register the agent in the catalog
             const insertedId = await new AgentsCatalog(db, config).registerAgent(req.agentDefinition);

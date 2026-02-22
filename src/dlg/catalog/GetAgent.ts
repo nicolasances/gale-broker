@@ -14,7 +14,7 @@ export class GetAgent extends TotoDelegate<GetAgentRequest, GetAgentResponse> {
 
         try {
 
-                        const db = await config.getMongoDb(config.getDBName());
+            const db = await config.getMongoDb(config.getDBName());
 
             // Register the agent in the catalog
             const agent = await new AgentsCatalog(db, config).getAgent(req.taskId);

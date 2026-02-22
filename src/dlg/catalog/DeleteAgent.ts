@@ -15,7 +15,7 @@ export class DeleteAgent extends TotoDelegate<DeleteAgentRequest, DeleteAgentRes
 
         try {
 
-                        const db = await config.getMongoDb(config.getDBName());
+            const db = await config.getMongoDb(config.getDBName());
 
             // Register the agent in the catalog
             const deletedCount = await new AgentsCatalog(db, this.config as GaleConfig).deleteAgentsWithTaskId(taskId);

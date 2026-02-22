@@ -14,7 +14,7 @@ export class GetAgents extends TotoDelegate<GetAgentsRequest, GetAgentsResponse>
 
         try {
 
-                        const db = await config.getMongoDb(config.getDBName());
+            const db = await config.getMongoDb(config.getDBName());
 
             // Register the agent in the catalog
             const agents = await new AgentsCatalog(db, config).getAgents();
@@ -44,7 +44,7 @@ export class GetAgents extends TotoDelegate<GetAgentsRequest, GetAgentsResponse>
 
 }
 
-interface GetAgentsRequest extends TotoRequest {}
+interface GetAgentsRequest extends TotoRequest { }
 
 interface GetAgentsResponse {
     agents: AgentDefinition[];

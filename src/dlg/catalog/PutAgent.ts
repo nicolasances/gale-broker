@@ -17,7 +17,7 @@ export class UpdateAgent extends TotoDelegate<UpdateAgentRequest, UpdateAgentRes
 
         try {
 
-                        const db = await config.getMongoDb(config.getDBName());
+            const db = await config.getMongoDb(config.getDBName());
 
             logger.compute(cid, `Updating Agent [${req.agentDefinition.name}] in catalog. Agent Task Endpoint: [${req.agentDefinition.endpoint?.baseURL}${req.agentDefinition.endpoint?.executionPath}]`);
 
