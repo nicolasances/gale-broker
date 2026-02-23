@@ -63,6 +63,7 @@ export class ConversationMessagesStream extends TotoDelegate<ConversationStatusS
                 if (lastMessageIndexRead < messages.length - 1) {
 
                     // Send the last message
+                    // POTENTIAL TODO: maybe the best would be to send all the messages that have not been sent yet and let the consumer decide if to only take the last one... 
                     const messageToSend = messages[messages.length - 1];
 
                     logger.compute(this.cid, `Sending message ${messageToSend.messageId} of conversation ${req.conversationId} to client...`);
