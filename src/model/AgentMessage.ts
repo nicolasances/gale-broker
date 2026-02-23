@@ -37,3 +37,7 @@ export function agentConversationMessageFromTotoMessage(msg: TotoMessage): Agent
 export function agentConversationMessageFromMongo(obj: any): AgentConversationMessage {
     return obj as AgentConversationMessage;
 }
+
+export function agentConversationMessageFromHTTPBody(body: any): AgentConversationMessage {
+    return body as AgentConversationMessage;
+}

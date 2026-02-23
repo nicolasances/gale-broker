@@ -416,7 +416,7 @@ export class TaskExecution {
             data: task
         };
 
-        const destination: MessageDestination = new MessageDestination({ topic: "galeagents" });
+        const destination: MessageDestination = new MessageDestination({ topic: "galeagents", queue: "galeagents" });
 
         await this.messageBus.publishMessage(destination, message);
     }

@@ -1,4 +1,4 @@
-import { Db } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import { GaleConfig } from "../Config";
 import { AgentConversationMessage, agentConversationMessageFromMongo } from "../model/AgentMessage";
 
@@ -32,7 +32,7 @@ export class ConversationStore {
 
         // Check if conversation exists (or needs to be created)
         const existingConversation = conversationId
-            ? await this.db.collection(this.conversationsCollection).findOne({ conversationId })
+            ? await this.db.collection(this.conversationsCollection).findOne({ _id: new ObjectId(conversationId) })
             : null;
 
         if (!existingConversation) {
@@ -47,17 +47,16 @@ export class ConversationStore {
         else {
 
             await this.db.collection(this.conversationsCollection).updateOne(
-                { conversationId },
+                { _id: new ObjectId(conversationId) },
                 { $set: { updatedAt: now, agentId } }
             );
         }
 
+        msg.conversationId = conversationId;
+        
         const messageId = await this.db.collection(this.conversationMessagesCollection).insertOne({
-            conversationId,
-            role: 'user',
-            content: message,
-            userEmail,
-            timestamp: now,
+            ...msg, 
+            timestamp: now
         });
 
         return { conversationId: conversationId!, messageId: messageId.insertedId.toString() };

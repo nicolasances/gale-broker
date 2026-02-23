@@ -71,7 +71,7 @@ export class ConversationMessagesStream extends TotoDelegate<ConversationStatusS
                     send("message", { message: messageToSend.message });
 
                     // Update the index
-                    lastMessageIndexRead = messages.length;
+                    lastMessageIndexRead = messages.length - 1;
 
                     // Check if the message is the last of a stream 
                     if (messageToSend.stream?.last) {

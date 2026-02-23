@@ -2,7 +2,7 @@ import http from "request";
 import { Logger } from "totoms";
 import { AgentDefinition } from "../model/AgentDefinition";
 import { AgentTaskRequest, AgentTaskResponse } from "../model/AgentTask";
-import { AgentConversationMessage } from "../model/AgentMessage";
+import { AgentConversationMessage, agentConversationMessageFromHTTPBody } from "../model/AgentMessage";
 import { GaleConfig } from "../Config";
 import { generateTotoJWTToken } from "../util/GenerateTotoJWTToken";
 
@@ -48,11 +48,11 @@ export class AgentCall {
      * @param msg 
      * @returns 
      */
-    async sendMessage(msg: AgentConversationMessage): Promise<AgentTaskResponse> {
+    async sendMessage(msg: AgentConversationMessage): Promise<AgentConversationMessage> {
 
         this.logger.compute(this.cid, `Calling Agent [${this.agentDefinition.name}] at [${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.messagesPath}]`);
 
-        return new Promise<AgentTaskResponse>((success, failure) => {
+        return new Promise<AgentConversationMessage>((success, failure) => {
 
             http({
                 uri: `${this.agentDefinition.endpoint.baseURL}${this.agentDefinition.endpoint.messagesPath}`,
@@ -72,16 +72,12 @@ export class AgentCall {
                 }
 
                 if (resp.statusCode != 200) {
-                    success(new AgentTaskResponse({
-                        correlationId: msg.conversationId || "",
-                        stopReason: "failed",
-                        taskOutput: { error: `Agent responded with status code ${resp.statusCode}: ${body}` },
-                    }));
+                    success(agentConversationMessageFromHTTPBody(resp.body));
                 }
 
                 // Parse the output
                 try {
-                    const agentResponse = AgentTaskResponse.fromHTTPResponse(body);
+                    const agentResponse = agentConversationMessageFromHTTPBody(body);
                     success(agentResponse);
                 }
                 catch (error) {
