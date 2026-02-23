@@ -12,6 +12,7 @@ import { GetAgentExecutionRecord } from "./dlg/tracking/GetAgentExecutionRecord"
 import { AgentMessageMsgHandler } from "./evt/handlers/AgentMessageMsgHandler";
 import { PostConversationMessage } from "./dlg/PostConversationMessage";
 import { AgentTaskMsgHandler } from "./evt/handlers/AgentTaskMsgHandler";
+import { ConversationMessagesStream } from "./dlg/ConversationMessagesStream";
 
 const config: TotoMicroserviceConfiguration = {
     serviceName: "gale-broker",
@@ -41,6 +42,9 @@ const config: TotoMicroserviceConfiguration = {
 
             // Agentic Flows
             { method: 'GET', path: '/flows/:correlationId', delegate: GetAgenticFlow },
+        ],
+        streamEndpoints: [
+            { method: 'GET', path: '/conversations/:conversationId/stream', delegate: ConversationMessagesStream }
         ]
     },
     messageBusConfiguration: {
@@ -48,9 +52,9 @@ const config: TotoMicroserviceConfiguration = {
             { logicalName: "galeagents", secret: "topic-name-gale-agents" }
         ],
         messageHandlers: [
-            AgentTaskMsgHandler, 
+            AgentTaskMsgHandler,
             AgentMessageMsgHandler
-        ], 
+        ],
         messageBusOverride: process.env.USE_DEVQ ? new DevQImpl() : undefined
     }
 };

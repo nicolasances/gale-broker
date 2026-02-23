@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { GaleConfig } from "../Config";
-import { AgentConversationMessage } from "../model/AgentMessage";
+import { AgentConversationMessage, agentConversationMessageFromMongo } from "../model/AgentMessage";
 
 export class ConversationStore {
 
@@ -63,4 +63,29 @@ export class ConversationStore {
         return { conversationId: conversationId!, messageId: messageId.insertedId.toString() };
     }
 
+    /**
+     * Retrieve all the messages of the given conversation 
+     * 
+     * @param conversationId 
+     */
+    async getConversationMessages(conversationId: string): Promise<AgentConversationMessage[]> {
+
+        const messages = await this.db.collection(this.conversationMessagesCollection).find({ conversationId }).sort({ timestamp: 1 }).toArray();
+
+        return messages.map(msg => {return agentConversationMessageFromMongo(msg)}); // Convert MongoDB documents to AgentConversationMessage
+
+    }
+
+    /**
+     * Rerieve only the messages of the given conversation that are coming from the agent (i.e., messages with actor "agent")
+     * 
+     * @param conversationId 
+     * @returns 
+     */
+    async getAgentMessages(conversationId: string): Promise<AgentConversationMessage[]> {
+
+        const messages = await this.db.collection(this.conversationMessagesCollection).find({ conversationId, actor: 'agent' }).sort({ timestamp: 1 }).toArray();
+
+        return messages.map(msg => {return agentConversationMessageFromMongo(msg)}); // Convert MongoDB documents to AgentConversationMessage
+    }
 }
