@@ -44,7 +44,7 @@ const config: TotoMicroserviceConfiguration = {
             { method: 'GET', path: '/flows/:correlationId', delegate: GetAgenticFlow },
         ],
         streamEndpoints: [
-            { method: 'GET', path: '/conversations/:conversationId/stream', delegate: ConversationMessagesStream }
+            { method: 'GET', path: '/conversations/:conversationId/stream', delegate: ConversationMessagesStream, options: { sseEndpoint: true } }
         ]
     },
     messageBusConfiguration: {
