@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
+import { Logger, TotoDelegate, TotoRequest, TotoRuntimeError, UserContext, ValidationError } from "totoms";
 import { AgentDefinition } from "../../model/AgentDefinition";
 import { GaleConfig } from "../../Config";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
@@ -7,27 +7,24 @@ import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 /**
  * Endpoint to register a new Agent Definition
  */
-export class UpdateAgent implements TotoDelegate {
+export class UpdateAgent extends TotoDelegate<UpdateAgentRequest, UpdateAgentResponse> {
 
-    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<UpdateAgentResponse> {
+    async do(req: UpdateAgentRequest, userContext?: UserContext): Promise<UpdateAgentResponse> {
 
-        const config = execContext.config as GaleConfig;
-        const logger = execContext.logger;
-        const cid = execContext.cid;
+        const config = this.config as GaleConfig;
+        const logger = Logger.getInstance();
+        const cid = this.cid;
 
         try {
 
-            const client = await config.getMongoClient();
-            const db = client.db(config.getDBName());
+            const db = await config.getMongoDb(config.getDBName());
 
-            const updateAgentRequest = UpdateAgentRequest.fromRequest(req);
-
-            logger.compute(cid, `Updating Agent [${updateAgentRequest.agentDefinition.name}] in catalog. Agent Task Endpoint: [${updateAgentRequest.agentDefinition.endpoint?.baseURL}${updateAgentRequest.agentDefinition.endpoint?.executionPath}]`);
+            logger.compute(cid, `Updating Agent [${req.agentDefinition.name}] in catalog. Agent Task Endpoint: [${req.agentDefinition.endpoint?.baseURL}${req.agentDefinition.endpoint?.executionPath}]`);
 
             // Register the agent in the catalog
-            const modifiedCount = await new AgentsCatalog(db, execContext).updateAgent(updateAgentRequest.agentDefinition);
+            const modifiedCount = await new AgentsCatalog(db, config).updateAgent(req.agentDefinition);
 
-            logger.compute(cid, `Agent [${updateAgentRequest.agentDefinition.name}] registration updated. Modified count: [${modifiedCount}]`);
+            logger.compute(cid, `Agent [${req.agentDefinition.name}] registration updated. Modified count: [${modifiedCount}]`);
 
             return { modifiedCount }
 
@@ -48,28 +45,20 @@ export class UpdateAgent implements TotoDelegate {
 
     }
 
-}
-
-class UpdateAgentRequest {
-
-    agentDefinition: AgentDefinition;
-
-    constructor(agentDefinition: AgentDefinition) {
-        this.agentDefinition = agentDefinition;
-    }
-
-    /**
-     * Creates a RegisterAgentRequest from an Express request.
-     * @param req the Express request.
-     * @returns a UpdateAgentRequest instance.
-     */
-    static fromRequest(req: Request): UpdateAgentRequest {
+    public parseRequest(req: Request): UpdateAgentRequest {
         const body = req.body;
 
         if (!body.agentDefinition) throw new ValidationError(400, "agentDefinition is required");
 
-        return new UpdateAgentRequest(AgentDefinition.fromJSON(body.agentDefinition));
+        return {
+            agentDefinition: AgentDefinition.fromJSON(body.agentDefinition)
+        };
     }
+
+}
+
+interface UpdateAgentRequest extends TotoRequest {
+    agentDefinition: AgentDefinition;
 }
 interface UpdateAgentResponse {
 }

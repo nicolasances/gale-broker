@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { ExecutionContext, TotoDelegate, UserContext } from "toto-api-controller";
+import { Logger, TotoDelegate, TotoRequest, UserContext } from "totoms";
 import { TaskExecution } from "../core/task/TaskExecution";
 import { extractBearerToken } from "../util/HeaderUtils";
 import { AgentTaskRequest, AgentTaskResponse } from "../model/AgentTask";
@@ -12,25 +12,40 @@ import { AgentStatusTracker } from "../core/tracking/AgentStatusTracker";
 /**
  * Endpoint to post a task to an Agent for execution.
  */
-export class PostTask implements TotoDelegate {
+export class PostTask extends TotoDelegate<PostTaskRequest, AgentTaskResponse> {
 
-    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<AgentTaskResponse> {
+    async do(req: PostTaskRequest, userContext?: UserContext): Promise<AgentTaskResponse> {
 
-        const token = extractBearerToken(req);
-        const config = execContext.config as GaleConfig;
+        const config = this.config as GaleConfig;
+        const logger = Logger.getInstance();
+        const cid = this.cid || "";
 
-        const client = await config.getMongoClient();
-        const db = client.db(config.getDBName());
+        const db = await config.getMongoDb(config.getDBName());
 
         const result = await new TaskExecution({
-            execContext,
-            agentCallFactory: new DefaultAgentCallFactory(execContext, token ? token : undefined),
-            agenticFlowTracker: new AgenticFlowTracker(db, execContext, new AgentStatusTracker(db, execContext)),
-            agentsCatalog: new AgentsCatalog(db, execContext)
-        }).do(AgentTaskRequest.fromHTTPRequest(req));
+            config,
+            logger,
+            cid,
+            messageBus: this.messageBus,
+            agentCallFactory: new DefaultAgentCallFactory(cid, config, req.bearerToken || undefined),
+            agenticFlowTracker: new AgenticFlowTracker(db, config, new AgentStatusTracker(db, config)),
+            agentsCatalog: new AgentsCatalog(db, config)
+        }).do(req.taskRequest);
 
         return result;
 
     }
 
+    public parseRequest(req: Request): PostTaskRequest {
+        return {
+            bearerToken: extractBearerToken(req),
+            taskRequest: AgentTaskRequest.fromHTTPRequest(req)
+        };
+    }
+
+}
+
+interface PostTaskRequest extends TotoRequest {
+    bearerToken: string | null;
+    taskRequest: AgentTaskRequest;
 }

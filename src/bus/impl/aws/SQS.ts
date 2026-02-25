@@ -1,13 +1,13 @@
 import { SQSClient, SendMessageCommand, ReceiveMessageCommand, DeleteMessageCommand, GetQueueUrlCommand } from '@aws-sdk/client-sqs';
 import { GaleMessage, IMessageBus, IQueue } from '../../MessageBus';
-import { Logger, ValidationError } from 'toto-api-controller';
+import { Logger, ValidationError } from 'totoms';
 
 export class SQSMessageBus extends IQueue {
 
     private client: SQSClient;
     private queueUrl: string | undefined;
     private isPolling: boolean = false;
-    private logger = new Logger("gale-broker");
+    private logger = Logger.getInstance();
     private messageHandler: (msgPayload: any) => Promise<void>;
 
     constructor(private readonly queueName: string, private readonly region: string) {

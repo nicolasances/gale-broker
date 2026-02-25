@@ -1,7 +1,7 @@
 import { AgentsCatalog } from "../catalog/AgentsCatalog";
 import { AgentNotFoundError } from "../../model/error/AgentNotFoundError";
 import { AgentCallFactory } from "../../api/AgentCall";
-import { ExecutionContext, Logger, TotoRuntimeError, ValidationError } from "toto-api-controller";
+import { Logger, MessageDestination, TotoMessage, TotoMessageBus, TotoRuntimeError, ValidationError } from "totoms";
 import { GaleConfig } from "../../Config";
 import { AgentTaskRequest, AgentTaskResponse, ParentTaskInfo, TaskGroup } from "../../model/AgentTask";
 import { v4 as uuidv4 } from "uuid";
@@ -9,6 +9,7 @@ import { isRootTaskFirstStart, isParentTaskResumption, isSubtaskStart } from "./
 import { AgentStatusTracker } from "../tracking/AgentStatusTracker";
 import { AgenticFlowTracker } from "../tracking/AgenticFlowTracker";
 import { AgentDefinition } from "../../model/AgentDefinition";
+import moment from "moment-timezone";
 
 const MAX_AGENT_CALL_RETRIES = 1;
 
@@ -23,24 +24,22 @@ const MAX_AGENT_CALL_RETRIES = 1;
  * Subtasks are spawned by publishing them to the Message Bus, allowing for asynchronous execution by other Agents.
  */
 export class TaskExecution {
-
-    execContext: ExecutionContext;
     config: GaleConfig;
     logger: Logger;
     cid: string;
+    messageBus: TotoMessageBus;
     agentCallFactory: AgentCallFactory;
     agenticFlowTracker: AgenticFlowTracker;
     agentsCatalog: AgentsCatalog;
 
-    constructor({ execContext, agentCallFactory, agenticFlowTracker, agentsCatalog }: { execContext: ExecutionContext, agentCallFactory: AgentCallFactory, agenticFlowTracker: AgenticFlowTracker, agentsCatalog: AgentsCatalog }) {
-        this.execContext = execContext;
+    constructor({ config, logger, cid, messageBus, agentCallFactory, agenticFlowTracker, agentsCatalog }: { config: GaleConfig, logger: Logger, cid: string, messageBus: TotoMessageBus, agentCallFactory: AgentCallFactory, agenticFlowTracker: AgenticFlowTracker, agentsCatalog: AgentsCatalog }) {
+        this.config = config;
+        this.logger = logger;
+        this.cid = cid;
+        this.messageBus = messageBus;
         this.agentCallFactory = agentCallFactory;
         this.agenticFlowTracker = agenticFlowTracker;
         this.agentsCatalog = agentsCatalog;
-
-        this.config = execContext.config as GaleConfig;
-        this.cid = execContext.cid ?? "";
-        this.logger = execContext.logger;
     }
 
     /**
@@ -49,7 +48,7 @@ export class TaskExecution {
     async do(task: AgentTaskRequest): Promise<AgentTaskResponse> {
 
         const cid = this.cid;
-        const logger = this.execContext.logger;
+        const logger = this.logger;
 
         try {
             const tracker = this.agenticFlowTracker;
@@ -219,7 +218,7 @@ export class TaskExecution {
      */
     private async callAgent(agent: AgentDefinition, task: AgentTaskRequest, attempts = 0): Promise<AgentTaskResponse> {
 
-        const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).execute(task, task.correlationId!);
+        const agentTaskResponse: AgentTaskResponse = await this.agentCallFactory.createAgentCall(agent).sendTask(task, task.correlationId!);
 
         if (agentTaskResponse.stopReason == 'failed' && attempts <= MAX_AGENT_CALL_RETRIES) {
 
@@ -251,7 +250,7 @@ export class TaskExecution {
             const groupDone = await tracker.isGroupDone(task.correlationId!, task.taskGroupId);
 
             if (groupDone && task.parentTask) {
-                this.execContext.logger.compute(this.cid, `[GROUP COMPLETED] - [${task.taskId} - ${task.taskInstanceId}] - Group ${task.taskGroupId} - Correlation Id: ${task.correlationId}`, "info");
+                this.logger.compute(this.cid, `[GROUP COMPLETED] - [${task.taskId} - ${task.taskInstanceId}] - Group ${task.taskGroupId} - Correlation Id: ${task.correlationId}`, "info");
 
                 await this.resumeParentTask(task.taskGroupId, task.parentTask!.taskInstanceId, task.correlationId!, tracker.agentStatusTracker);
             }
@@ -309,9 +308,7 @@ export class TaskExecution {
                 },
             });
 
-            const bus = this.config.messageBus;
-
-            await bus.publishTask(agentTaskRequest, this.cid);
+            await this.publishTask(agentTaskRequest);
 
             // Mark the parent task as resumed in the tracker
             await statusTracker.markTaskResumedAfterGroupCompletion(parentTaskInstanceId, taskGroupId);
@@ -343,8 +340,6 @@ export class TaskExecution {
      * @param tracker the Agentic Flow tracker to use for tracking
      */
     private async spawnSubtasks(subtaskGroups: TaskGroup[], parentTask: ParentTaskInfo, after: { object: "agent" | "group", objectId: string } | null, branchId: string | null, tracker: AgenticFlowTracker): Promise<void> {
-
-        const bus = this.config.messageBus;
 
         const publishPromises: Promise<void>[] = [];
         const branches: { branchId: string, tasks: AgentTaskRequest[] }[] = [];
@@ -388,14 +383,14 @@ export class TaskExecution {
                     try {
 
                         // 1. Publish the task to the bus
-                        await bus.publishTask(task, this.cid);
+                        await this.publishTask(task);
 
-                        this.execContext.logger.compute(this.cid, `Subtask [${task.taskId}] successfully spawned.`, "info");
+                        this.logger.compute(this.cid, `Subtask [${task.taskId}] successfully spawned.`, "info");
 
                         resolve();
 
                     } catch (error) {
-                        this.execContext.logger.compute(this.cid, `Failed to spawn subtask [${task.taskId}]: ${error}`, "error");
+                        this.logger.compute(this.cid, `Failed to spawn subtask [${task.taskId}]: ${error}`, "error");
                         reject(error);
                     }
 
@@ -405,6 +400,25 @@ export class TaskExecution {
 
         // Wait for all to be published
         await Promise.all(publishPromises);
+    }
+
+    /**
+     * Publishes a task to the message bus for asynchronous processing.
+     */
+    private async publishTask(task: AgentTaskRequest): Promise<void> {
+
+        const message: TotoMessage = {
+            timestamp: moment().tz('Europe/Rome').format('YYYY.MM.DD HH:mm:ss'),
+            cid: task.correlationId || this.cid,
+            id: task.taskInstanceId || task.taskId,
+            type: "task",
+            msg: `Task [${task.taskId}] enqueued for execution`,
+            data: task
+        };
+
+        const destination: MessageDestination = new MessageDestination({ topic: "galeagents", queue: "galeagents" });
+
+        await this.messageBus.publishMessage(destination, message);
     }
 
 }

@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { ExecutionContext, TotoDelegate, TotoRuntimeError, UserContext, ValidationError } from "toto-api-controller";
+import { Logger, TotoDelegate, TotoRequest, TotoRuntimeError, UserContext, ValidationError } from "totoms";
 import { AgentDefinition } from "../../model/AgentDefinition";
 import { GaleConfig } from "../../Config";
 import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
@@ -7,25 +7,22 @@ import { AgentsCatalog } from "../../core/catalog/AgentsCatalog";
 /**
  * Endpoint to register a new Agent Definition
  */
-export class RegisterAgent implements TotoDelegate {
+export class RegisterAgent extends TotoDelegate<RegisterAgentRequest, RegisterAgentResponse> {
 
-    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<RegisterAgentResponse> {
+    async do(req: RegisterAgentRequest, userContext?: UserContext): Promise<RegisterAgentResponse> {
 
-        const config = execContext.config as GaleConfig;
-        const logger = execContext.logger;
-        const cid = execContext.cid;
+        const config = this.config as GaleConfig;
+        const logger = Logger.getInstance();
+        const cid = this.cid;
 
         try {
 
-            const client = await config.getMongoClient();
-            const db = client.db(config.getDBName());
-
-            const registerAgentRequest = RegisterAgentRequest.fromRequest(req);
+            const db = await config.getMongoDb(config.getDBName());
 
             // Register the agent in the catalog
-            const insertedId = await new AgentsCatalog(db, execContext).registerAgent(registerAgentRequest.agentDefinition);
+            const insertedId = await new AgentsCatalog(db, config).registerAgent(req.agentDefinition);
 
-            logger.compute(cid, `Agent [${registerAgentRequest.agentDefinition.name}] registered with id [${insertedId}]`);
+            logger.compute(cid, `Agent [${req.agentDefinition.name}] registered with id [${insertedId}]`);
 
             return { insertedId }
 
@@ -46,28 +43,20 @@ export class RegisterAgent implements TotoDelegate {
 
     }
 
-}
-
-class RegisterAgentRequest {
-
-    agentDefinition: AgentDefinition;
-
-    constructor(agentDefinition: AgentDefinition) {
-        this.agentDefinition = agentDefinition;
-    }
-
-    /**
-     * Creates a RegisterAgentRequest from an Express request.
-     * @param req the Express request.
-     * @returns a RegisterAgentRequest instance.
-     */
-    static fromRequest(req: Request): RegisterAgentRequest {
+    public parseRequest(req: Request): RegisterAgentRequest {
         const body = req.body;
 
         if (!body.agentDefinition) throw new ValidationError(400, "agentDefinition is required");
 
-        return new RegisterAgentRequest(AgentDefinition.fromJSON(body.agentDefinition));
+        return {
+            agentDefinition: AgentDefinition.fromJSON(body.agentDefinition)
+        };
     }
+
+}
+
+interface RegisterAgentRequest extends TotoRequest {
+    agentDefinition: AgentDefinition;
 }
 interface RegisterAgentResponse {
     insertedId: string;

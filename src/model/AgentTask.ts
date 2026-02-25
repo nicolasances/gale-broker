@@ -1,4 +1,4 @@
-import { TotoRuntimeError, ValidationError } from "toto-api-controller";
+import { TotoRuntimeError, ValidationError } from "totoms";
 
 /**
  * Models the data needed to send a task request TO an Agent (not to Gale Broker).

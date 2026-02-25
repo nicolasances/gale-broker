@@ -1,26 +1,36 @@
 
 import { Request } from "express";
-import { ExecutionContext, TotoDelegate, UserContext } from "toto-api-controller";
+import { TotoDelegate, TotoRequest, UserContext, ValidationError } from "totoms";
 import { GaleConfig } from "../../Config";
 import { TaskStatusRecord, AgentStatusTracker } from "../../core/tracking/AgentStatusTracker";
 
 /**
  */
-export class GetAgentExecutionRecord implements TotoDelegate {
+export class GetAgentExecutionRecord extends TotoDelegate<GetAgentExecutionRecordRequest, GetAgentExecutionRecordResponse> {
 
-    async do(req: Request, userContext: UserContext, execContext: ExecutionContext): Promise<GetAgentExecutionRecordResponse> {
+    async do(req: GetAgentExecutionRecordRequest, userContext?: UserContext): Promise<GetAgentExecutionRecordResponse> {
 
-        const config = execContext.config as GaleConfig;
+        const config = this.config as GaleConfig;
 
-        const client = await config.getMongoClient();
-        const db = client.db(config.getDBName());
+                const db = await config.getMongoDb(config.getDBName());
 
         // 1. Retrieve the exeuction records from the database
-        const task: TaskStatusRecord | null = await new AgentStatusTracker(db, execContext).findTaskByInstanceId(req.params.taskInstanceId);
+        const task: TaskStatusRecord | null = await new AgentStatusTracker(db, config).findTaskByInstanceId(req.taskInstanceId);
 
         return { task }
 
     }
+    public parseRequest(req: Request): GetAgentExecutionRecordRequest {
+        const taskInstanceId = req.params.taskInstanceId;
+        if (!taskInstanceId) throw new ValidationError(400, "taskInstanceId is required");
+
+        return { taskInstanceId };
+    }
+
+}
+
+interface GetAgentExecutionRecordRequest extends TotoRequest {
+    taskInstanceId: string;
 }
 
 export interface GetAgentExecutionRecordResponse {

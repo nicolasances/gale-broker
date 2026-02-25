@@ -1,10 +1,8 @@
 import { Db } from "mongodb";
-import { ExecutionContext, TotoRuntimeError } from "toto-api-controller";
-import { AgentTaskRequest, ParentTaskInfo, TaskInfo, TaskId, AgentTaskResponse } from "../../model/AgentTask";
+import { TotoRuntimeError } from "totoms";
+import { AgentTaskRequest, TaskId, AgentTaskResponse } from "../../model/AgentTask";
 import { GaleConfig } from "../../Config";
-import { StopReason } from "../../model/AgentTask";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { v4 as uuidv4 } from 'uuid';
 
 const MAX_LOCK_ATTEMPTS = 10;
 
@@ -14,8 +12,8 @@ export class AgentStatusTracker {
     tasksCollection: any;
     branchesCollection: any;
 
-    constructor(private db: Db, private execContext: ExecutionContext) {
-        this.config = execContext.config as GaleConfig;
+    constructor(private db: Db, config: GaleConfig) {
+        this.config = config;
         this.tasksCollection = this.db.collection(this.config.getCollections().tasks);
         this.branchesCollection = this.db.collection(this.config.getCollections().branches);
     }
