@@ -1,9 +1,6 @@
 import http from "request";
 import { GaleMessage, IMessageBus } from "../../MessageBus";
-import { GaleConfig } from "../../../Config";
-import { generateTotoJWTToken } from "../../../util/GenerateTotoJWTToken";
-import { galeConfig } from "../../..";
-import { newTotoServiceToken, TotoControllerConfig } from "toto-api-controller";
+import { newTotoServiceToken, TotoControllerConfig } from "totoms";
 
 /**
  * Implementation of MessageBus to use DevQ (local queue for local testing purposes only).

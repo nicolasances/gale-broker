@@ -1,6 +1,6 @@
 import { Db } from "mongodb";
 import { AgentDefinition } from "../../model/AgentDefinition";
-import { ExecutionContext, TotoRuntimeError, ValidationError } from "toto-api-controller";
+import { TotoRuntimeError, ValidationError } from "totoms";
 import { GaleConfig } from "../../Config";
 import { TaskId } from "../../model/AgentTask";
 
@@ -8,8 +8,8 @@ export class AgentsCatalog {
 
     private config: GaleConfig;
 
-    constructor(private db: Db, private execContext: ExecutionContext) {
-        this.config = execContext.config as GaleConfig;
+    constructor(private db: Db, config: GaleConfig) {
+        this.config = config;
     }
 
     /**
@@ -53,7 +53,9 @@ export class AgentsCatalog {
 
         const agentsCollection = this.db.collection(this.config.getCollections().agents);
 
-        const agentData = await agentsCollection.findOne({ taskId: taskId });
+        const agentData = await agentsCollection.findOne({ $or: [{ taskId: taskId }, { agentId: taskId }] });
+
+        if (!agentData) throw new ValidationError(404, `Agent with taskId or agentId [${taskId}] not found`);
 
         return AgentDefinition.fromBSON(agentData);
     }
@@ -129,7 +131,7 @@ export class AgentsCatalog {
 const stripDollarProps = (obj: any): any => {
 
     if (typeof obj !== 'object' || obj === null) return obj;
-    
+
     if (Array.isArray(obj)) return obj.map(stripDollarProps);
 
     return Object.fromEntries(

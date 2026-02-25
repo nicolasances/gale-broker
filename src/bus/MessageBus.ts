@@ -1,7 +1,6 @@
-import { Logger, TotoControllerConfig } from "toto-api-controller";
+import { Logger, TotoControllerConfig } from "totoms";
 import { GaleConfig } from "../Config";
 import { AgentTaskRequest } from "../model/AgentTask";
-import { GaleMessageHandler } from "../evt/handlers/GaleMessageHandler";
 
 /**
  * This module provides asynchronous messaging capabilities. 
@@ -69,9 +68,9 @@ export class GaleMessageBus {
 
         // 1. Decode the Gale Message
         const galeMessage: GaleMessage = this.decodeMessage(msgPayload);
+        const logger = Logger.getInstance();
 
-        // 2. Call the Gale Message Handler
-        await new GaleMessageHandler().onMessage(galeMessage);
+        logger.compute(galeMessage.cid, `Received Gale Message of type [${galeMessage.type}] from queue implementation. No handler registered in legacy bus.`, "warn");
 
     }
 }
