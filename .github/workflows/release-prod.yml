@@ -3,7 +3,7 @@ name: Production Release
 on:
   push:
     branches: 
-      - 'release/**'
+      - main
 
 jobs:
   # This workflow contains a single job called "release"
