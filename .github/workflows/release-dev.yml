@@ -4,6 +4,7 @@ on:
   push:
     branches: 
       - 'feature/**'
+      - 'issue/**'
 
 jobs:
   # This workflow contains a single job called "release"

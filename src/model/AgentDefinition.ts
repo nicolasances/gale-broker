@@ -48,6 +48,7 @@ export class AgentDefinition {
         if (agentType !== "conversational" && agentType !== "taskExecutor") throw new ValidationError(400, `Invalid AgentDefinition JSON: agentType must be either 'conversational' or 'taskExecutor'. Received ${JSON.stringify(data)}.`);
         if (agentType == 'taskExecutor' && (!data.inputSchema || !data.outputSchema)) throw new ValidationError(400, `Invalid AgentDefinition JSON for taskExecutor: inputSchema and outputSchema are required. Received ${JSON.stringify(data)}.`);
         if (agentType == 'taskExecutor' && !data.taskId) throw new ValidationError(400, `Invalid AgentDefinition JSON for taskExecutor: taskId is required. Received ${JSON.stringify(data)}.`);
+        if (agentType === 'conversational' && !data.agentId?.trim()) throw new ValidationError(400, `Invalid AgentDefinition JSON for conversational: agentId is required. Received ${JSON.stringify(data)}.`);
 
         const def = new AgentDefinition();
         def.agentType = agentType;
