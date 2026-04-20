@@ -72,12 +72,15 @@ export class AgentCall {
                 }
 
                 if (resp.statusCode != 200) {
-                    success(agentConversationMessageFromHTTPBody(resp.body));
+                    const parsed = typeof resp.body === "string" ? JSON.parse(resp.body) : resp.body;
+                    success(agentConversationMessageFromHTTPBody(parsed));
+                    return;
                 }
 
                 // Parse the output
                 try {
-                    const agentResponse = agentConversationMessageFromHTTPBody(body);
+                    const parsed = typeof body === "string" ? JSON.parse(body) : body;
+                    const agentResponse = agentConversationMessageFromHTTPBody(parsed);
                     success(agentResponse);
                 }
                 catch (error) {
