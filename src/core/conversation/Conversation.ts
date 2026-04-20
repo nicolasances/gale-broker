@@ -66,7 +66,13 @@ export class Conversation {
             throw new Error(`Agent with ID [${agentMessage.agentId}] not found`);
         }
 
-        await new DefaultAgentCallFactory(this.cid, this.config).createAgentCall(agentDefinition).sendMessage(agentMessage);
+        const agentResponse = await new DefaultAgentCallFactory(this.cid, this.config).createAgentCall(agentDefinition).sendMessage(agentMessage);
+
+        // Persist the agent's final response so the SSE stream can detect stream.last
+        if (agentResponse && agentResponse.conversationId) {
+            const conversationStore = new ConversationStore(db, this.config);
+            await conversationStore.storeMessage(agentResponse);
+        }
 
     }
 
