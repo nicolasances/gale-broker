@@ -7,7 +7,8 @@ const collections = {
     flows: 'flows',
     branches: 'branches',
     conversations: 'conversations',
-    conversationMessages: 'conversationMessages'
+    conversationMessages: 'conversationMessages',
+    conversationReasoning: 'conversationReasoning'
 };
 
 export class GaleConfig extends TotoControllerConfig {
