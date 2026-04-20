@@ -2,14 +2,24 @@ import { Db, ObjectId } from "mongodb";
 import { GaleConfig } from "../Config";
 import { AgentConversationMessage, agentConversationMessageFromMongo } from "../model/AgentMessage";
 
+export interface ConversationReasoning {
+    conversationId: string;
+    messageId: string;
+    agentId: string;
+    chainOfThought: any[];
+    timestamp: string;
+}
+
 export class ConversationStore {
 
     private conversationsCollection: string;
     private conversationMessagesCollection: string;
+    private conversationReasoningCollection: string;
 
     constructor(private db: Db, private config: GaleConfig) {
         this.conversationsCollection = config.getCollections().conversations;
         this.conversationMessagesCollection = config.getCollections().conversationMessages;
+        this.conversationReasoningCollection = config.getCollections().conversationReasoning;
     }
 
     /**
@@ -53,13 +63,29 @@ export class ConversationStore {
         }
 
         msg.conversationId = conversationId;
-        
+
+        // Extract chainOfThought from agent messages before storing in conversationMessages
+        const { chainOfThought, ...msgWithoutChainOfThought } = msg;
+
         const messageId = await this.db.collection(this.conversationMessagesCollection).insertOne({
-            ...msg, 
+            ...msgWithoutChainOfThought,
             timestamp: now
         });
 
-        return { conversationId: conversationId!, messageId: messageId.insertedId.toString() };
+        const insertedMessageId = messageId.insertedId.toString();
+
+        // If this is an agent message with chainOfThought data, store it in the reasoning collection
+        if (msg.actor === "agent" && chainOfThought && chainOfThought.length > 0) {
+            await this.db.collection(this.conversationReasoningCollection).insertOne({
+                conversationId: conversationId!,
+                messageId: insertedMessageId,
+                agentId: msg.agentId,
+                chainOfThought,
+                timestamp: now
+            });
+        }
+
+        return { conversationId: conversationId!, messageId: insertedMessageId };
     }
 
     /**
@@ -86,5 +112,24 @@ export class ConversationStore {
         const messages = await this.db.collection(this.conversationMessagesCollection).find({ conversationId, actor: 'agent' }).sort({ timestamp: 1 }).toArray();
 
         return messages.map(msg => {return agentConversationMessageFromMongo(msg)}); // Convert MongoDB documents to AgentConversationMessage
+    }
+
+    /**
+     * Retrieve all chain-of-thought reasoning data for the given conversation.
+     * 
+     * @param conversationId 
+     * @returns 
+     */
+    async getConversationReasoning(conversationId: string): Promise<ConversationReasoning[]> {
+
+        const docs = await this.db.collection(this.conversationReasoningCollection).find({ conversationId }).sort({ timestamp: 1 }).toArray();
+
+        return docs.map(doc => ({
+            conversationId: doc.conversationId,
+            messageId: doc.messageId,
+            agentId: doc.agentId,
+            chainOfThought: doc.chainOfThought,
+            timestamp: doc.timestamp
+        }));
     }
 }

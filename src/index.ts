@@ -13,6 +13,7 @@ import { AgentMessageMsgHandler } from "./evt/handlers/AgentMessageMsgHandler";
 import { PostConversationMessage } from "./dlg/PostConversationMessage";
 import { AgentTaskMsgHandler } from "./evt/handlers/AgentTaskMsgHandler";
 import { ConversationMessagesStream } from "./dlg/ConversationMessagesStream";
+import { GetConversationData } from "./dlg/GetConversationData";
 
 const config: TotoMicroserviceConfiguration = {
     serviceName: "gale-broker",
@@ -39,6 +40,7 @@ const config: TotoMicroserviceConfiguration = {
 
             // Conversations 
             { method: 'POST', path: '/messages', delegate: PostConversationMessage },
+            { method: 'GET', path: '/conversations/:conversationId/data', delegate: GetConversationData },
 
             // Agentic Flows
             { method: 'GET', path: '/flows/:correlationId', delegate: GetAgenticFlow },

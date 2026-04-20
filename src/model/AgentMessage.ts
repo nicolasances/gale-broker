@@ -28,6 +28,8 @@ export interface AgentConversationMessage {
     extras?: {
         subjectEmail?: string;     // Email of the user subject of the interactions (useful for personalization or follow-up)
     }
+
+    chainOfThought?: any[];  // Raw LLM content blocks (thinking, text, tool-use, etc.)
 }
 
 export function agentConversationMessageFromTotoMessage(msg: TotoMessage): AgentConversationMessage {
