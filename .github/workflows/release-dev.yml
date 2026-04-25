@@ -5,6 +5,7 @@ on:
     branches: 
       - 'feature/**'
       - 'issue/**'
+      - main
 
 jobs:
   # This workflow contains a single job called "release"
